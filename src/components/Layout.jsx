@@ -6,6 +6,7 @@ import {
   ShoppingBag, 
   Package, 
   Users, 
+  UserPlus,
   Settings,
   LogOut,
   Menu,
@@ -23,6 +24,7 @@ const navigation = [
   { name: 'Orders', href: '/orders', icon: ShoppingBag },
   { name: 'Products', href: '/products', icon: Package },
   { name: 'Users', href: '/users', icon: Users },
+  { name: 'Leads', href: '/leads', icon: UserPlus, adminOnly: true },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
@@ -91,7 +93,9 @@ export default function Layout() {
 
           {/* Navigation */}
           <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-            {navigation.map((item) => (
+            {navigation
+              .filter(item => !item.adminOnly || user?.role === 'admin')
+              .map((item) => (
               <NavLink
                 key={item.name}
                 to={item.href}

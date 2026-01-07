@@ -12,9 +12,21 @@ const api = axios.create({
   }
 })
 
-// Request interceptor
+// Request interceptor - always get fresh token from localStorage
 api.interceptors.request.use(
   (config) => {
+    // Get token from localStorage on every request
+    try {
+      const authData = localStorage.getItem('powermerchant-auth')
+      if (authData) {
+        const { state } = JSON.parse(authData)
+        if (state?.token) {
+          config.headers.Authorization = `Bearer ${state.token}`
+        }
+      }
+    } catch (e) {
+      // Ignore parse errors
+    }
     return config
   },
   (error) => {

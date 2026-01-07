@@ -8,6 +8,7 @@ import MerchantDetail from './pages/MerchantDetail'
 import Orders from './pages/Orders'
 import Products from './pages/Products'
 import Users from './pages/Users'
+import Leads from './pages/Leads'
 import Settings from './pages/Settings'
 
 function ProtectedRoute({ children }) {
@@ -46,6 +47,7 @@ export default function App() {
         <Route path="orders" element={<Orders />} />
         <Route path="products" element={<Products />} />
         <Route path="users" element={<Users />} />
+        <Route path="leads" element={<Leads />} />
         <Route path="settings" element={<Settings />} />
       </Route>     
       <Route path="*" element={<Navigate to="/" replace />} />
