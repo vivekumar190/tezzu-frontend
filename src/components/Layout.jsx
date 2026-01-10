@@ -7,6 +7,7 @@ import {
   Package, 
   Users, 
   UserPlus,
+  MapPin,
   Settings,
   LogOut,
   Menu,
@@ -20,11 +21,13 @@ import clsx from 'clsx'
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Merchants', href: '/merchants', icon: Store },
+  { name: 'Merchants', href: '/merchants', icon: Store, adminOnly: true },
   { name: 'Orders', href: '/orders', icon: ShoppingBag },
   { name: 'Products', href: '/products', icon: Package },
-  { name: 'Users', href: '/users', icon: Users },
+  { name: 'Staff', href: '/staff', icon: Users, merchantOnly: true },
+  { name: 'Users', href: '/users', icon: Users, adminOnly: true },
   { name: 'Leads', href: '/leads', icon: UserPlus, adminOnly: true },
+  { name: 'Geo Map', href: '/geo-map', icon: MapPin, adminOnly: true },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
@@ -80,7 +83,7 @@ export default function Layout() {
               <MessageCircle className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="font-display font-bold text-xl gradient-text">PowerMerchant</h1>
+              <h1 className="font-display font-bold text-xl gradient-text">Tezzu</h1>
               <p className="text-xs text-surface-400">WhatsApp Commerce</p>
             </div>
             <button 
@@ -94,7 +97,13 @@ export default function Layout() {
           {/* Navigation */}
           <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
             {navigation
-              .filter(item => !item.adminOnly || user?.role === 'admin')
+              .filter(item => {
+                // Admin-only pages (like Merchants, Users, Leads)
+                if (item.adminOnly && user?.role !== 'admin') return false;
+                // Merchant-only pages (like Staff)
+                if (item.merchantOnly && user?.role !== 'merchant_admin') return false;
+                return true;
+              })
               .map((item) => (
               <NavLink
                 key={item.name}

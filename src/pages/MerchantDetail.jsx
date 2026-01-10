@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { 
@@ -14,7 +14,12 @@ import {
   Package,
   Plus,
   Trash2,
-  GripVertical
+  GripVertical,
+  Navigation,
+  Target,
+  Layers,
+  Save,
+  RefreshCw
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
@@ -198,17 +203,18 @@ export default function MerchantDetail() {
       {/* Tabs */}
       <div className="border-b border-surface-200">
         <nav className="flex gap-8">
-          {['menu', 'orders', 'settings'].map((tab) => (
+          {['menu', 'orders', 'location', 'settings'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={clsx(
-                'pb-4 px-1 text-sm font-medium capitalize transition-colors relative',
+                'pb-4 px-1 text-sm font-medium capitalize transition-colors relative flex items-center gap-2',
                 activeTab === tab
                   ? 'text-primary-600'
                   : 'text-surface-500 hover:text-surface-700'
               )}
             >
+              {tab === 'location' && <MapPin className="w-4 h-4" />}
               {tab}
               {activeTab === tab && (
                 <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-500" />
@@ -371,6 +377,10 @@ export default function MerchantDetail() {
             View Orders
           </button>
         </div>
+      )}
+
+      {activeTab === 'location' && (
+        <LocationSettings merchant={merchant} merchantId={id} />
       )}
 
       {activeTab === 'settings' && (
@@ -616,6 +626,422 @@ function ProductModal({ merchantId, categories, product, onClose }) {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  )
+}
+
+// Location Settings Component
+function LocationSettings({ merchant, merchantId }) {
+  const [latitude, setLatitude] = useState('')
+  const [longitude, setLongitude] = useState('')
+  const [radius, setRadius] = useState(5)
+  const [zoneName, setZoneName] = useState('')
+  const [deliveryCharge, setDeliveryCharge] = useState(30)
+  const [estimatedTime, setEstimatedTime] = useState(30)
+  const [minimumOrder, setMinimumOrder] = useState(100)
+  const [locationEnabled, setLocationEnabled] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [gettingLocation, setGettingLocation] = useState(false)
+  const queryClient = useQueryClient()
+
+  // Initialize from merchant data
+  useEffect(() => {
+    if (merchant) {
+      if (merchant.location?.coordinates) {
+        setLongitude(merchant.location.coordinates[0]?.toString() || '')
+        setLatitude(merchant.location.coordinates[1]?.toString() || '')
+      }
+      setLocationEnabled(merchant.useLocationBasedOrdering || false)
+      
+      if (merchant.deliveryZones?.length > 0) {
+        const zone = merchant.deliveryZones[0]
+        setZoneName(zone.name || '')
+        setDeliveryCharge(zone.deliveryCharge || 30)
+        setEstimatedTime(zone.estimatedTime || 30)
+        setMinimumOrder(zone.minimumOrder || 100)
+      }
+    }
+  }, [merchant])
+
+  // Get current location
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocation not supported')
+      return
+    }
+
+    setGettingLocation(true)
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLatitude(position.coords.latitude.toFixed(6))
+        setLongitude(position.coords.longitude.toFixed(6))
+        setGettingLocation(false)
+        toast.success('Location detected!')
+      },
+      (error) => {
+        setGettingLocation(false)
+        toast.error('Failed to get location: ' + error.message)
+      },
+      { enableHighAccuracy: true }
+    )
+  }
+
+  // Generate circular zone polygon
+  const generateCircularZone = (centerLng, centerLat, radiusKm) => {
+    const points = 32
+    const coordinates = []
+    const earthRadius = 6371
+
+    for (let i = 0; i <= points; i++) {
+      const angle = (i / points) * 2 * Math.PI
+      const dLat = (radiusKm / earthRadius) * (180 / Math.PI)
+      const dLng = dLat / Math.cos(centerLat * Math.PI / 180)
+      const lat = centerLat + dLat * Math.sin(angle)
+      const lng = centerLng + dLng * Math.cos(angle)
+      coordinates.push([lng, lat])
+    }
+
+    if (coordinates.length > 0) {
+      coordinates.push(coordinates[0])
+    }
+
+    return {
+      type: 'Polygon',
+      coordinates: [coordinates]
+    }
+  }
+
+  // Save location settings
+  const handleSave = async () => {
+    if (!latitude || !longitude) {
+      toast.error('Please enter location coordinates')
+      return
+    }
+
+    setIsSubmitting(true)
+
+    try {
+      const lat = parseFloat(latitude)
+      const lng = parseFloat(longitude)
+
+      // Generate zone polygon
+      const zonePolygon = generateCircularZone(lng, lat, radius)
+
+      // Update merchant location
+      await api.put(`/zones/${merchantId}/location`, {
+        latitude: lat,
+        longitude: lng
+      })
+
+      // Create/update delivery zone
+      const zoneData = {
+        name: zoneName || `${radius}km Delivery Zone`,
+        area: zonePolygon,
+        deliveryCharge,
+        estimatedTime,
+        minimumOrder,
+        isActive: true
+      }
+
+      // First, try to get existing zones to check if we need to create or update
+      let existingZones = []
+      try {
+        const zonesRes = await api.get(`/zones/${merchantId}`)
+        existingZones = zonesRes.data?.data?.zones || []
+      } catch (e) {
+        // No zones yet
+      }
+
+      // Check if auto-generated zone exists (ends with "km Delivery Zone")
+      const existingAutoZone = existingZones.find(z => z.name?.includes('km Delivery Zone'))
+
+      if (existingAutoZone) {
+        // Update existing zone
+        await api.put(`/zones/${merchantId}/${existingAutoZone._id}`, zoneData)
+      } else {
+        // Create new zone
+        await api.post(`/zones/${merchantId}`, zoneData)
+      }
+
+      // Toggle location-based ordering if needed
+      // Only call toggle if the state is different from what we want
+      const currentRes = await api.get(`/zones/${merchantId}`)
+      const currentEnabled = currentRes.data?.data?.useLocationBasedOrdering || false
+      
+      if (locationEnabled !== currentEnabled) {
+        await api.put(`/zones/${merchantId}/toggle`)
+      }
+
+      queryClient.invalidateQueries(['merchant', merchantId])
+      toast.success('Location settings saved!')
+    } catch (error) {
+      console.error('Error saving location:', error)
+      const errorMsg = error.response?.data?.error?.message || 'Failed to save location settings'
+      toast.error(errorMsg)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const hasLocation = latitude && longitude
+
+  return (
+    <div className="space-y-6">
+      {/* Status Card */}
+      <div className={clsx(
+        'card p-6 border-l-4',
+        locationEnabled && hasLocation ? 'border-l-green-500 bg-green-50/50' : 'border-l-amber-500 bg-amber-50/50'
+      )}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className={clsx(
+              'w-12 h-12 rounded-xl flex items-center justify-center',
+              locationEnabled && hasLocation ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-600'
+            )}>
+              <Target className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-surface-900">Location-Based Ordering</h3>
+              <p className="text-sm text-surface-500">
+                {locationEnabled && hasLocation 
+                  ? 'Customers in your delivery zone can find you' 
+                  : 'Set up location to enable zone-based delivery'}
+              </p>
+            </div>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={locationEnabled}
+              onChange={(e) => setLocationEnabled(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-surface-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-surface-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+          </label>
+        </div>
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-6">
+        {/* Location Input */}
+        <div className="card p-6">
+          <h3 className="font-semibold text-surface-900 mb-4 flex items-center gap-2">
+            <MapPin className="w-5 h-5 text-primary-500" />
+            Restaurant Location
+          </h3>
+
+          <div className="space-y-4">
+            <button
+              onClick={getCurrentLocation}
+              disabled={gettingLocation}
+              className="w-full btn btn-secondary flex items-center justify-center gap-2"
+            >
+              {gettingLocation ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Getting location...
+                </>
+              ) : (
+                <>
+                  <Navigation className="w-4 h-4" />
+                  Use Current Location
+                </>
+              )}
+            </button>
+
+            <div className="text-center text-sm text-surface-400">or enter manually</div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">Latitude</label>
+                <input
+                  type="number"
+                  step="any"
+                  value={latitude}
+                  onChange={(e) => setLatitude(e.target.value)}
+                  className="input"
+                  placeholder="28.6139"
+                />
+              </div>
+              <div>
+                <label className="label">Longitude</label>
+                <input
+                  type="number"
+                  step="any"
+                  value={longitude}
+                  onChange={(e) => setLongitude(e.target.value)}
+                  className="input"
+                  placeholder="77.2090"
+                />
+              </div>
+            </div>
+
+            {hasLocation && (
+              <div className="p-3 bg-green-50 rounded-lg text-sm text-green-700 flex items-center gap-2">
+                <MapPin className="w-4 h-4" />
+                Location set: {parseFloat(latitude).toFixed(4)}, {parseFloat(longitude).toFixed(4)}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Delivery Radius */}
+        <div className="card p-6">
+          <h3 className="font-semibold text-surface-900 mb-4 flex items-center gap-2">
+            <Target className="w-5 h-5 text-primary-500" />
+            Delivery Radius
+          </h3>
+
+          <div className="space-y-4">
+            <div>
+              <label className="label">Select Radius</label>
+              <div className="grid grid-cols-4 gap-2">
+                {[2, 5, 10, 15].map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => setRadius(r)}
+                    className={clsx(
+                      'py-3 px-4 rounded-xl font-medium transition-all text-sm',
+                      radius === r
+                        ? 'bg-primary-600 text-white shadow-lg shadow-primary-500/25'
+                        : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
+                    )}
+                  >
+                    {r} km
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="label">Zone Name (optional)</label>
+              <input
+                type="text"
+                value={zoneName}
+                onChange={(e) => setZoneName(e.target.value)}
+                className="input"
+                placeholder={`${radius}km Delivery Zone`}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Delivery Settings */}
+        <div className="card p-6">
+          <h3 className="font-semibold text-surface-900 mb-4 flex items-center gap-2">
+            <Layers className="w-5 h-5 text-primary-500" />
+            Delivery Settings
+          </h3>
+
+          <div className="space-y-4">
+            <div>
+              <label className="label">Delivery Charge (₹)</label>
+              <input
+                type="number"
+                value={deliveryCharge}
+                onChange={(e) => setDeliveryCharge(parseInt(e.target.value) || 0)}
+                className="input"
+                min={0}
+              />
+            </div>
+            <div>
+              <label className="label">Estimated Delivery Time (mins)</label>
+              <input
+                type="number"
+                value={estimatedTime}
+                onChange={(e) => setEstimatedTime(parseInt(e.target.value) || 30)}
+                className="input"
+                min={10}
+              />
+            </div>
+            <div>
+              <label className="label">Minimum Order Amount (₹)</label>
+              <input
+                type="number"
+                value={minimumOrder}
+                onChange={(e) => setMinimumOrder(parseInt(e.target.value) || 0)}
+                className="input"
+                min={0}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Preview */}
+        <div className="card p-6">
+          <h3 className="font-semibold text-surface-900 mb-4">Preview</h3>
+          
+          <div className="space-y-3 text-sm">
+            <div className="flex justify-between py-2 border-b border-surface-100">
+              <span className="text-surface-500">Location</span>
+              <span className="font-medium">
+                {hasLocation ? `${parseFloat(latitude).toFixed(4)}, ${parseFloat(longitude).toFixed(4)}` : 'Not set'}
+              </span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-surface-100">
+              <span className="text-surface-500">Delivery Radius</span>
+              <span className="font-medium">{radius} km</span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-surface-100">
+              <span className="text-surface-500">Delivery Charge</span>
+              <span className="font-medium">₹{deliveryCharge}</span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-surface-100">
+              <span className="text-surface-500">Est. Time</span>
+              <span className="font-medium">{estimatedTime} mins</span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-surface-100">
+              <span className="text-surface-500">Min Order</span>
+              <span className="font-medium">₹{minimumOrder}</span>
+            </div>
+            <div className="flex justify-between py-2">
+              <span className="text-surface-500">Status</span>
+              <span className={clsx(
+                'font-medium',
+                locationEnabled ? 'text-green-600' : 'text-amber-600'
+              )}>
+                {locationEnabled ? 'Enabled' : 'Disabled'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Save Button */}
+      <div className="flex justify-end">
+        <button
+          onClick={handleSave}
+          disabled={isSubmitting || !hasLocation}
+          className="btn btn-primary flex items-center gap-2"
+        >
+          {isSubmitting ? (
+            <>
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            <>
+              <Save className="w-4 h-4" />
+              Save Location Settings
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* WhatsApp Tip */}
+      <div className="card p-4 bg-blue-50 border-blue-200">
+        <div className="flex items-start gap-3">
+          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+            💡
+          </div>
+          <div>
+            <p className="font-medium text-blue-900">Tip: Update via WhatsApp</p>
+            <p className="text-sm text-blue-700 mt-1">
+              Merchants can also update their location by sending "location" or "settings" 
+              on WhatsApp, then sharing their live location and selecting a delivery radius.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   )

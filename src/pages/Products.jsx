@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { 
   Search, 
@@ -11,18 +11,29 @@ import {
 import toast from 'react-hot-toast'
 import api from '../lib/api'
 import clsx from 'clsx'
+import { useAuthStore } from '../store/authStore'
 
 export default function Products() {
+  const { user } = useAuthStore()
+  const isMerchantAdmin = user?.role === 'merchant_admin'
   const [search, setSearch] = useState('')
   const [selectedMerchant, setSelectedMerchant] = useState('')
   const queryClient = useQueryClient()
+
+  // Auto-select merchant for merchant_admin users
+  useEffect(() => {
+    if (isMerchantAdmin && user?.merchant) {
+      setSelectedMerchant(user.merchant)
+    }
+  }, [isMerchantAdmin, user?.merchant])
 
   const { data: merchants } = useQuery({
     queryKey: ['merchants'],
     queryFn: async () => {
       const res = await api.get('/merchants?limit=100')
       return res.data.data.merchants
-    }
+    },
+    enabled: !isMerchantAdmin // Only fetch for admin users
   })
 
   const { data: products, isLoading } = useQuery({
@@ -60,16 +71,19 @@ export default function Products() {
       {/* Filters */}
       <div className="card p-4">
         <div className="flex flex-wrap gap-4">
-          <select
-            value={selectedMerchant}
-            onChange={(e) => setSelectedMerchant(e.target.value)}
-            className="input w-auto min-w-[200px]"
-          >
-            <option value="">Select Merchant</option>
-            {merchants?.map(m => (
-              <option key={m._id} value={m._id}>{m.name}</option>
-            ))}
-          </select>
+          {/* Only show merchant selector for admin users */}
+          {!isMerchantAdmin && (
+            <select
+              value={selectedMerchant}
+              onChange={(e) => setSelectedMerchant(e.target.value)}
+              className="input w-auto min-w-[200px]"
+            >
+              <option value="">Select Merchant</option>
+              {merchants?.map(m => (
+                <option key={m._id} value={m._id}>{m.name}</option>
+              ))}
+            </select>
+          )}
 
           {selectedMerchant && (
             <div className="flex-1 min-w-[200px]">
@@ -92,8 +106,12 @@ export default function Products() {
       {!selectedMerchant ? (
         <div className="card p-12 text-center">
           <Package className="w-16 h-16 mx-auto mb-4 text-surface-300" />
-          <h3 className="text-lg font-medium text-surface-900 mb-2">Select a merchant</h3>
-          <p className="text-surface-500">Choose a merchant to view their products</p>
+          <h3 className="text-lg font-medium text-surface-900 mb-2">
+            {isMerchantAdmin ? 'Loading your products...' : 'Select a merchant'}
+          </h3>
+          <p className="text-surface-500">
+            {isMerchantAdmin ? 'Please wait...' : 'Choose a merchant to view their products'}
+          </p>
         </div>
       ) : isLoading ? (
         <div className="card overflow-hidden">

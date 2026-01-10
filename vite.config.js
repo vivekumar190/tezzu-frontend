@@ -8,11 +8,21 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://localhost:3001',
-        changeOrigin: true
+        changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
+            console.log('API proxy error:', err.message);
+          });
+        }
       },
       '/socket.io': {
         target: 'http://localhost:3001',
-        ws: true
+        ws: true,
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
+            console.log('WebSocket proxy error:', err.message);
+          });
+        }
       }
     }
   }

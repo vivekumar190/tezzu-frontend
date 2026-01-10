@@ -8,7 +8,9 @@ import MerchantDetail from './pages/MerchantDetail'
 import Orders from './pages/Orders'
 import Products from './pages/Products'
 import Users from './pages/Users'
+import Staff from './pages/Staff'
 import Leads from './pages/Leads'
+import GeoMap from './pages/GeoMap'
 import Settings from './pages/Settings'
 
 function ProtectedRoute({ children }) {
@@ -46,8 +48,10 @@ export default function App() {
         <Route path="merchants/:id" element={<MerchantDetail />} />
         <Route path="orders" element={<Orders />} />
         <Route path="products" element={<Products />} />
+        <Route path="staff" element={<Staff />} />
         <Route path="users" element={<Users />} />
         <Route path="leads" element={<Leads />} />
+        <Route path="geo-map" element={<GeoMap />} />
         <Route path="settings" element={<Settings />} />
       </Route>     
       <Route path="*" element={<Navigate to="/" replace />} />
