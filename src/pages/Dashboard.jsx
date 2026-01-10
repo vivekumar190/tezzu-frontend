@@ -9,9 +9,13 @@ import {
   Clock,
   ArrowUpRight,
   ArrowDownRight,
-  Package
+  Package,
+  Users,
+  MessageCircle,
+  Activity,
+  MapPin
 } from 'lucide-react'
-import { format } from 'date-fns'
+import { format, formatDistanceToNow } from 'date-fns'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts'
 import api from '../lib/api'
 import { getSocket, joinMerchantRoom } from '../lib/socket'
@@ -40,6 +44,27 @@ export default function Dashboard() {
     }
   })
 
+  // Live activity - refresh every 30 seconds
+  const { data: liveActivity } = useQuery({
+    queryKey: ['live-activity'],
+    queryFn: async () => {
+      const res = await api.get('/customers/activity?minutes=60')
+      return res.data.data
+    },
+    refetchInterval: 30000, // Refresh every 30 seconds
+    enabled: user?.role === 'admin'
+  })
+
+  // Customer stats
+  const { data: customerStats } = useQuery({
+    queryKey: ['customer-stats-dashboard'],
+    queryFn: async () => {
+      const res = await api.get('/customers/stats')
+      return res.data.data
+    },
+    enabled: user?.role === 'admin'
+  })
+
   useEffect(() => {
     const socket = getSocket()
     
@@ -66,12 +91,13 @@ export default function Dashboard() {
 
   const stats = [
     {
-      name: 'Total Merchants',
-      value: dashboardData?.stats?.totalMerchants || 0,
-      icon: Store,
-      change: '+2 this week',
+      name: 'Total Customers',
+      value: customerStats?.totalCustomers || 0,
+      icon: Users,
+      change: `${customerStats?.newThisWeek || 0} new this week`,
       changeType: 'positive',
-      color: 'bg-blue-500'
+      color: 'bg-blue-500',
+      adminOnly: true
     },
     {
       name: "Today's Orders",
@@ -90,14 +116,32 @@ export default function Dashboard() {
       color: 'bg-amber-500'
     },
     {
+      name: 'Active Now',
+      value: liveActivity?.activeCustomers || customerStats?.activeToday || 0,
+      icon: Activity,
+      change: 'Last hour',
+      changeType: 'neutral',
+      color: 'bg-green-500',
+      adminOnly: true
+    },
+    {
       name: 'Pending Orders',
       value: dashboardData?.stats?.pendingOrders || 0,
       icon: Clock,
       change: 'Needs attention',
       changeType: dashboardData?.stats?.pendingOrders > 5 ? 'negative' : 'neutral',
       color: 'bg-purple-500'
+    },
+    {
+      name: 'With Location',
+      value: customerStats?.customersWithLocation || 0,
+      icon: MapPin,
+      change: 'Geo-tracked',
+      changeType: 'neutral',
+      color: 'bg-cyan-500',
+      adminOnly: true
     }
-  ]
+  ].filter(s => !s.adminOnly || user?.role === 'admin')
 
   const getStatusColor = (status) => {
     const colors = {
@@ -248,7 +292,7 @@ export default function Dashboard() {
       </div>
 
       {/* Bottom Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent Orders */}
         <div className="card">
           <div className="flex items-center justify-between p-6 border-b border-surface-100">
@@ -283,6 +327,72 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+
+        {/* Live Activity Feed - Admin Only */}
+        {user?.role === 'admin' && (
+          <div className="card">
+            <div className="flex items-center justify-between p-6 border-b border-surface-100">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                </span>
+                <h3 className="font-semibold text-surface-900">Live Activity</h3>
+              </div>
+              <Link to="/customers" className="text-sm text-primary-600 hover:text-primary-700 font-medium">
+                View all →
+              </Link>
+            </div>
+            <div className="divide-y divide-surface-100 max-h-[320px] overflow-y-auto">
+              {liveActivity?.activities?.slice(0, 8).map((activity, idx) => (
+                <div key={idx} className="flex items-center gap-3 p-3 hover:bg-surface-50 transition-colors">
+                  <div className={clsx(
+                    'w-8 h-8 rounded-full flex items-center justify-center',
+                    activity.type === 'order' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'
+                  )}>
+                    {activity.type === 'order' ? (
+                      <ShoppingBag className="w-4 h-4" />
+                    ) : (
+                      <MessageCircle className="w-4 h-4" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-surface-900 truncate">
+                      {activity.type === 'order' ? (
+                        <>
+                          <span className="font-medium">{activity.customerName}</span>
+                          {' placed order '}
+                          <span className="font-medium">#{activity.orderNumber}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="font-medium">{activity.customerName}</span>
+                          {' is active'}
+                          {activity.totalOrders > 0 && ` • ${activity.totalOrders} orders`}
+                        </>
+                      )}
+                    </p>
+                    <p className="text-xs text-surface-400">
+                      {activity.type === 'order' && activity.merchantName && (
+                        <span>{activity.merchantName} • </span>
+                      )}
+                      {activity.type === 'order' && (
+                        <span className="text-green-600">₹{activity.amount} • </span>
+                      )}
+                      {formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })}
+                    </p>
+                  </div>
+                </div>
+              ))}
+              {(!liveActivity?.activities || liveActivity.activities.length === 0) && (
+                <div className="p-8 text-center text-surface-500">
+                  <Activity className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No recent activity</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Top Merchants */}
         <div className="card">
