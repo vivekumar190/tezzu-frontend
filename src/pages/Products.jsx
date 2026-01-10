@@ -6,12 +6,16 @@ import {
   Plus,
   Filter,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
+  Image,
+  RefreshCw,
+  Check
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
 import clsx from 'clsx'
 import { useAuthStore } from '../store/authStore'
+import CatalogSync from '../components/CatalogSync'
 
 export default function Products() {
   const { user } = useAuthStore()
@@ -57,6 +61,19 @@ export default function Products() {
     onSuccess: () => {
       queryClient.invalidateQueries(['products', selectedMerchant])
       toast.success('Product availability updated')
+    }
+  })
+
+  // Sync individual product to catalog
+  const syncProduct = useMutation({
+    mutationFn: (productId) => api.post(`/catalog/sync/product/${productId}`),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries(['products', selectedMerchant])
+      queryClient.invalidateQueries(['catalog-sync-status'])
+      toast.success('Product synced to catalog!')
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.error || 'Failed to sync product')
     }
   })
 
@@ -108,6 +125,15 @@ export default function Products() {
         </div>
       </div>
 
+      {/* Catalog Sync - Show when merchant is selected */}
+      {selectedMerchant && (
+        <CatalogSync 
+          merchantId={selectedMerchant} 
+          merchantName={isMerchantAdmin ? user?.merchant?.name : merchants?.find(m => m._id === selectedMerchant)?.name}
+          compact={true}
+        />
+      )}
+
       {/* Products Table */}
       {!selectedMerchant ? (
         <div className="card p-12 text-center">
@@ -128,6 +154,7 @@ export default function Products() {
                 <th className="px-6 py-4 text-left text-xs font-medium text-surface-500 uppercase">Category</th>
                 <th className="px-6 py-4 text-left text-xs font-medium text-surface-500 uppercase">Price</th>
                 <th className="px-6 py-4 text-left text-xs font-medium text-surface-500 uppercase">Status</th>
+                <th className="px-6 py-4 text-center text-xs font-medium text-surface-500 uppercase">Catalog</th>
                 <th className="px-6 py-4 text-right text-xs font-medium text-surface-500 uppercase">Actions</th>
               </tr>
             </thead>
@@ -138,6 +165,7 @@ export default function Products() {
                   <td className="px-6 py-4"><div className="h-5 bg-surface-200 rounded w-1/2" /></td>
                   <td className="px-6 py-4"><div className="h-5 bg-surface-200 rounded w-16" /></td>
                   <td className="px-6 py-4"><div className="h-5 bg-surface-200 rounded w-20" /></td>
+                  <td className="px-6 py-4"><div className="h-5 bg-surface-200 rounded w-16 mx-auto" /></td>
                   <td className="px-6 py-4"><div className="h-5 bg-surface-200 rounded w-24 ml-auto" /></td>
                 </tr>
               ))}
@@ -159,6 +187,7 @@ export default function Products() {
                 <th className="px-6 py-4 text-left text-xs font-medium text-surface-500 uppercase">Category</th>
                 <th className="px-6 py-4 text-left text-xs font-medium text-surface-500 uppercase">Price</th>
                 <th className="px-6 py-4 text-left text-xs font-medium text-surface-500 uppercase">Status</th>
+                <th className="px-6 py-4 text-center text-xs font-medium text-surface-500 uppercase">Catalog</th>
                 <th className="px-6 py-4 text-right text-xs font-medium text-surface-500 uppercase">Actions</th>
               </tr>
             </thead>
@@ -190,6 +219,37 @@ export default function Products() {
                     )}>
                       {product.isAvailable ? 'In Stock' : 'Out of Stock'}
                     </span>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    {product.catalogProductId ? (
+                      <button
+                        onClick={() => syncProduct.mutate(product._id)}
+                        disabled={syncProduct.isPending}
+                        className="inline-flex items-center gap-1 text-xs text-green-600 bg-green-50 hover:bg-green-100 px-2 py-1 rounded-full transition-colors cursor-pointer"
+                        title="Re-sync product"
+                      >
+                        {syncProduct.isPending && syncProduct.variables === product._id ? (
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Check className="w-3 h-3" />
+                        )}
+                        Synced
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => syncProduct.mutate(product._id)}
+                        disabled={syncProduct.isPending}
+                        className="inline-flex items-center gap-1 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-full transition-colors cursor-pointer"
+                        title="Sync to catalog"
+                      >
+                        {syncProduct.isPending && syncProduct.variables === product._id ? (
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <RefreshCw className="w-3 h-3" />
+                        )}
+                        Sync
+                      </button>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-right">
                     <button
