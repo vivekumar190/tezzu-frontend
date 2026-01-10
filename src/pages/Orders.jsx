@@ -591,8 +591,18 @@ function AssignDeliveryModal({ order, onClose, onAssign, isLoading }) {
                         <p className="text-sm text-surface-500">{boy.phone}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm text-surface-500">Deliveries</p>
-                        <p className="font-semibold text-surface-900">{boy.totalDeliveries || 0}</p>
+                        <div className="flex items-center gap-3">
+                          {boy.activeOrders > 0 && (
+                            <div className="text-center">
+                              <p className="text-xs text-surface-500">Active</p>
+                              <p className="font-semibold text-orange-600">{boy.activeOrders}</p>
+                            </div>
+                          )}
+                          <div className="text-center">
+                            <p className="text-xs text-surface-500">Total</p>
+                            <p className="font-semibold text-surface-900">{boy.totalDeliveries || 0}</p>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
