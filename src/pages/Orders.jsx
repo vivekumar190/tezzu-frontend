@@ -13,7 +13,11 @@ import {
   Phone,
   MapPin,
   ChevronDown,
-  RefreshCw
+  RefreshCw,
+  Bike,
+  User,
+  X,
+  Calendar
 } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -49,6 +53,7 @@ export default function Orders() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '')
+  const [assignModalOrder, setAssignModalOrder] = useState(null)
   const queryClient = useQueryClient()
 
   const { data, isLoading, refetch } = useQuery({
@@ -106,6 +111,19 @@ export default function Orders() {
     onSuccess: () => {
       queryClient.invalidateQueries(['orders'])
       toast.success('Order rejected')
+    }
+  })
+
+  const assignDeliveryMutation = useMutation({
+    mutationFn: ({ orderId, deliveryBoyId }) => 
+      api.post(`/orders/${orderId}/assign-delivery`, { deliveryBoyId }),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries(['orders'])
+      toast.success(`Assigned to ${res.data.data.deliveryBoy.name}`)
+      setAssignModalOrder(null)
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.error?.message || 'Failed to assign')
     }
   })
 
@@ -184,6 +202,7 @@ export default function Orders() {
                 onAccept={() => acceptOrderMutation.mutate(order._id)}
                 onReject={(reason) => rejectOrderMutation.mutate({ orderId: order._id, reason })}
                 onUpdateStatus={(status) => updateStatusMutation.mutate({ orderId: order._id, status })}
+                onAssignDelivery={() => setAssignModalOrder(order)}
               />
             ))
           )}
@@ -195,6 +214,7 @@ export default function Orders() {
             <OrderDetails 
               order={selectedOrder} 
               onUpdateStatus={(status) => updateStatusMutation.mutate({ orderId: selectedOrder._id, status })}
+              onAssignDelivery={() => setAssignModalOrder(selectedOrder)}
             />
           ) : (
             <div className="card p-8 text-center sticky top-28">
@@ -204,13 +224,24 @@ export default function Orders() {
           )}
         </div>
       </div>
+
+      {/* Assign Delivery Boy Modal */}
+      {assignModalOrder && (
+        <AssignDeliveryModal
+          order={assignModalOrder}
+          onClose={() => setAssignModalOrder(null)}
+          onAssign={(deliveryBoyId) => assignDeliveryMutation.mutate({ 
+            orderId: assignModalOrder._id, 
+            deliveryBoyId 
+          })}
+          isLoading={assignDeliveryMutation.isPending}
+        />
+      )}
     </div>
   )
 }
 
-function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateStatus }) {
-  const [showActions, setShowActions] = useState(false)
-
+function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateStatus, onAssignDelivery }) {
   const getStatusIcon = (status) => {
     switch (status) {
       case 'pending': return <Clock className="w-4 h-4" />
@@ -231,6 +262,9 @@ function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateSta
     ready: 'out_for_delivery',
     out_for_delivery: 'delivered'
   }
+
+  // Show assign delivery button for ready orders without delivery boy
+  const canAssignDelivery = ['accepted', 'preparing', 'ready'].includes(order.status)
 
   return (
     <div 
@@ -264,6 +298,22 @@ function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateSta
         <span>{order.items?.length || 0} items</span>
       </div>
 
+      {/* Show Assigned Delivery Boy */}
+      {order.assignedDeliveryBoy && (
+        <div className="flex items-center gap-2 px-3 py-2 mb-3 bg-blue-50 rounded-lg text-sm text-blue-700">
+          <Bike className="w-4 h-4" />
+          <span>Assigned to: <strong>{order.assignedDeliveryBoy.name || 'Delivery Boy'}</strong></span>
+        </div>
+      )}
+
+      {/* Scheduled Order Badge */}
+      {order.scheduledFor && (
+        <div className="flex items-center gap-2 px-3 py-2 mb-3 bg-purple-50 rounded-lg text-sm text-purple-700">
+          <Calendar className="w-4 h-4" />
+          <span>Scheduled: {format(new Date(order.scheduledFor), 'MMM d, h:mm a')}</span>
+        </div>
+      )}
+
       {/* Quick Actions */}
       {order.status === 'pending' && (
         <div className="flex gap-2 pt-3 border-t border-surface-100" onClick={e => e.stopPropagation()}>
@@ -287,13 +337,37 @@ function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateSta
         </div>
       )}
 
-      {nextStatus[order.status] && (
+      {/* Assign Delivery + Next Status */}
+      {canAssignDelivery && (
+        <div className="flex gap-2 pt-3 border-t border-surface-100" onClick={e => e.stopPropagation()}>
+          {!order.assignedDeliveryBoy && (
+            <button 
+              onClick={onAssignDelivery}
+              className="btn btn-ghost btn-sm flex-1"
+            >
+              <Bike className="w-4 h-4" />
+              Assign Rider
+            </button>
+          )}
+          {nextStatus[order.status] && (
+            <button 
+              onClick={() => onUpdateStatus(nextStatus[order.status])}
+              className="btn btn-secondary btn-sm flex-1"
+            >
+              Mark {nextStatus[order.status].replace('_', ' ')}
+            </button>
+          )}
+        </div>
+      )}
+
+      {order.status === 'out_for_delivery' && (
         <div className="pt-3 border-t border-surface-100" onClick={e => e.stopPropagation()}>
           <button 
-            onClick={() => onUpdateStatus(nextStatus[order.status])}
-            className="btn btn-secondary btn-sm w-full"
+            onClick={() => onUpdateStatus('delivered')}
+            className="btn btn-success btn-sm w-full"
           >
-            Mark as {nextStatus[order.status].replace('_', ' ')}
+            <CheckCircle className="w-4 h-4" />
+            Mark as Delivered
           </button>
         </div>
       )}
@@ -301,7 +375,9 @@ function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateSta
   )
 }
 
-function OrderDetails({ order, onUpdateStatus }) {
+function OrderDetails({ order, onUpdateStatus, onAssignDelivery }) {
+  const canAssignDelivery = ['accepted', 'preparing', 'ready'].includes(order.status)
+
   return (
     <div className="card sticky top-28 overflow-hidden">
       <div className="p-6 border-b border-surface-100 bg-surface-50">
@@ -317,17 +393,65 @@ function OrderDetails({ order, onUpdateStatus }) {
       </div>
 
       <div className="p-6 space-y-6">
+        {/* Scheduled Delivery */}
+        {order.scheduledFor && (
+          <div className="p-3 bg-purple-50 rounded-xl">
+            <div className="flex items-center gap-2 text-purple-700">
+              <Calendar className="w-4 h-4" />
+              <span className="text-sm font-medium">Scheduled Delivery</span>
+            </div>
+            <p className="mt-1 text-purple-800 font-semibold">
+              {format(new Date(order.scheduledFor), 'EEEE, MMM d • h:mm a')}
+            </p>
+          </div>
+        )}
+
+        {/* Assigned Delivery Boy */}
+        {order.assignedDeliveryBoy ? (
+          <div className="p-3 bg-blue-50 rounded-xl">
+            <div className="flex items-center gap-2 text-blue-700 mb-2">
+              <Bike className="w-4 h-4" />
+              <span className="text-sm font-medium">Delivery Assigned</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-blue-200 flex items-center justify-center">
+                <User className="w-5 h-5 text-blue-700" />
+              </div>
+              <div>
+                <p className="font-semibold text-surface-900">
+                  {order.assignedDeliveryBoy.name || 'Delivery Boy'}
+                </p>
+                {order.assignedDeliveryBoy.phone && (
+                  <p className="text-sm text-surface-500">{order.assignedDeliveryBoy.phone}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : canAssignDelivery && (
+          <button 
+            onClick={onAssignDelivery}
+            className="w-full p-3 border-2 border-dashed border-surface-200 rounded-xl hover:border-primary-300 hover:bg-primary-50 transition-colors"
+          >
+            <div className="flex items-center justify-center gap-2 text-surface-500">
+              <Bike className="w-5 h-5" />
+              <span className="font-medium">Assign Delivery Boy</span>
+            </div>
+          </button>
+        )}
+
         {/* Customer Info */}
         <div>
           <h4 className="text-sm font-medium text-surface-500 mb-3">Customer</h4>
           <div className="space-y-2">
+            {order.customerName && (
+              <p className="font-medium text-surface-900">{order.customerName}</p>
+            )}
             <div className="flex items-center gap-2">
               <Phone className="w-4 h-4 text-surface-400" />
-              <span>{order.customerPhone}</span>
+              <a href={`tel:${order.customerPhone}`} className="text-primary-600 hover:underline">
+                {order.customerPhone}
+              </a>
             </div>
-            {order.customerName && (
-              <p className="text-surface-700">{order.customerName}</p>
-            )}
           </div>
         </div>
 
@@ -395,6 +519,122 @@ function OrderDetails({ order, onUpdateStatus }) {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+// Assign Delivery Boy Modal
+function AssignDeliveryModal({ order, onClose, onAssign, isLoading }) {
+  const [selectedBoy, setSelectedBoy] = useState(null)
+
+  const { data: deliveryBoys, isLoading: loadingBoys } = useQuery({
+    queryKey: ['available-delivery-boys', order._id],
+    queryFn: async () => {
+      const res = await api.get(`/orders/${order._id}/available-delivery-boys`)
+      return res.data.data.deliveryBoys
+    }
+  })
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50" onClick={onClose} />
+        
+        <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-surface-100">
+            <div>
+              <h2 className="text-lg font-semibold text-surface-900">Assign Delivery Boy</h2>
+              <p className="text-sm text-surface-500">Order #{order.orderNumber}</p>
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-surface-100 rounded-lg">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="p-6">
+            {loadingBoys ? (
+              <div className="py-8 text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto" />
+                <p className="mt-3 text-surface-500">Loading delivery boys...</p>
+              </div>
+            ) : deliveryBoys?.length === 0 ? (
+              <div className="py-8 text-center">
+                <Bike className="w-12 h-12 mx-auto mb-3 text-surface-300" />
+                <p className="text-surface-700 font-medium">No delivery boys available</p>
+                <p className="text-sm text-surface-500 mt-1">
+                  Add delivery boys from the Staff page
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {deliveryBoys?.map((boy) => (
+                  <div
+                    key={boy._id}
+                    onClick={() => setSelectedBoy(boy._id)}
+                    className={clsx(
+                      'p-4 rounded-xl border-2 cursor-pointer transition-all',
+                      selectedBoy === boy._id 
+                        ? 'border-primary-500 bg-primary-50' 
+                        : 'border-surface-200 hover:border-surface-300'
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={clsx(
+                        'w-10 h-10 rounded-full flex items-center justify-center',
+                        selectedBoy === boy._id ? 'bg-primary-200' : 'bg-surface-100'
+                      )}>
+                        <Bike className="w-5 h-5" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-surface-900">{boy.name}</p>
+                        <p className="text-sm text-surface-500">{boy.phone}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-surface-500">Deliveries</p>
+                        <p className="font-semibold text-surface-900">{boy.totalDeliveries || 0}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Order Summary */}
+            <div className="mt-6 p-4 bg-surface-50 rounded-xl">
+              <h4 className="text-sm font-medium text-surface-500 mb-2">Delivery Details</h4>
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-surface-600">Customer</span>
+                  <span className="font-medium">{order.customerName || order.customerPhone}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-surface-600">Address</span>
+                  <span className="font-medium truncate max-w-[180px]">
+                    {order.deliveryAddress?.street || 'N/A'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-surface-600">Amount</span>
+                  <span className="font-semibold text-primary-600">₹{order.totalAmount}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3 px-6 py-4 border-t border-surface-100">
+            <button onClick={onClose} className="btn btn-ghost flex-1">
+              Cancel
+            </button>
+            <button 
+              onClick={() => selectedBoy && onAssign(selectedBoy)}
+              disabled={!selectedBoy || isLoading}
+              className="btn btn-primary flex-1"
+            >
+              {isLoading ? 'Assigning...' : 'Assign & Notify'}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )
