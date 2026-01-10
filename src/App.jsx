@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Merchants from './pages/Merchants'
 import MerchantDetail from './pages/MerchantDetail'
+import MyShop from './pages/MyShop'
 import Orders from './pages/Orders'
 import Products from './pages/Products'
 import Users from './pages/Users'
@@ -47,6 +48,7 @@ export default function App() {
         <Route index element={<Dashboard />} />
         <Route path="merchants" element={<Merchants />} />
         <Route path="merchants/:id" element={<MerchantDetail />} />
+        <Route path="my-shop" element={<MyShop />} />
         <Route path="orders" element={<Orders />} />
         <Route path="products" element={<Products />} />
         <Route path="staff" element={<Staff />} />

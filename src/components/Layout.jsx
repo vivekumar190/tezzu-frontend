@@ -22,6 +22,7 @@ import clsx from 'clsx'
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+  { name: 'My Shop', href: '/my-shop', icon: Store, merchantOnly: true },
   { name: 'Merchants', href: '/merchants', icon: Store, adminOnly: true },
   { name: 'Orders', href: '/orders', icon: ShoppingBag },
   { name: 'Products', href: '/products', icon: Package },
