@@ -23,7 +23,13 @@ export default function Products() {
   // Auto-select merchant for merchant_admin users
   useEffect(() => {
     if (isMerchantAdmin && user?.merchant) {
-      setSelectedMerchant(user.merchant)
+      // Handle both cases: merchant as object or string ID
+      const merchantId = typeof user.merchant === 'object' 
+        ? user.merchant._id 
+        : user.merchant
+      if (merchantId) {
+        setSelectedMerchant(merchantId)
+      }
     }
   }, [isMerchantAdmin, user?.merchant])
 

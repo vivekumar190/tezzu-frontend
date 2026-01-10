@@ -50,7 +50,12 @@ export default function Dashboard() {
 
       // Join merchant room if merchant admin
       if (user?.merchant) {
-        joinMerchantRoom(user.merchant)
+        const merchantId = typeof user.merchant === 'object' 
+          ? user.merchant._id 
+          : user.merchant
+        if (merchantId) {
+          joinMerchantRoom(merchantId)
+        }
       }
     }
 
