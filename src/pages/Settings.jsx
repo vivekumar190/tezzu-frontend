@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { Settings as SettingsIcon, Key, Server, MessageCircle, Bell, Shield } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Settings as SettingsIcon, Key, Server, MessageCircle, Bell, Shield, ShoppingBag, Eye, EyeOff, ShoppingCart, RefreshCw } from 'lucide-react'
 import api from '../lib/api'
 import { useAuthStore } from '../store/authStore'
 import toast from 'react-hot-toast'
@@ -20,6 +20,7 @@ export default function Settings() {
 
   const tabs = [
     { id: 'general', label: 'General', icon: SettingsIcon },
+    { id: 'commerce', label: 'WhatsApp Commerce', icon: ShoppingBag },
     { id: 'wati', label: 'WATI Config', icon: MessageCircle },
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'security', label: 'Security', icon: Shield },
@@ -57,6 +58,7 @@ export default function Settings() {
         {/* Content */}
         <div className="lg:col-span-3">
           {activeTab === 'general' && <GeneralSettings />}
+          {activeTab === 'commerce' && <CommerceSettings />}
           {activeTab === 'wati' && <WATISettings settings={settings} />}
           {activeTab === 'notifications' && <NotificationSettings />}
           {activeTab === 'security' && <SecuritySettings />}
@@ -93,6 +95,161 @@ function GeneralSettings() {
       </div>
 
       <button className="btn btn-primary">Save Changes</button>
+    </div>
+  )
+}
+
+function CommerceSettings() {
+  const queryClient = useQueryClient()
+  
+  const { data: commerceSettings, isLoading, refetch } = useQuery({
+    queryKey: ['commerce-settings'],
+    queryFn: async () => {
+      const res = await api.get('/catalog/commerce-settings')
+      return res.data.data
+    },
+    retry: false
+  })
+
+  const updateSettings = useMutation({
+    mutationFn: async (settings) => {
+      const res = await api.patch('/catalog/commerce-settings', settings)
+      return res.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['commerce-settings'])
+      toast.success('Commerce settings updated!')
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.error || 'Failed to update settings')
+    }
+  })
+
+  const toggleCatalogVisibility = () => {
+    updateSettings.mutate({
+      is_catalog_visible: !commerceSettings?.is_catalog_visible
+    })
+  }
+
+  const toggleCart = () => {
+    updateSettings.mutate({
+      is_cart_enabled: !commerceSettings?.is_cart_enabled
+    })
+  }
+
+  if (isLoading) {
+    return (
+      <div className="card p-6">
+        <div className="animate-pulse space-y-4">
+          <div className="h-6 bg-surface-200 rounded w-1/3"></div>
+          <div className="h-4 bg-surface-200 rounded w-2/3"></div>
+          <div className="h-20 bg-surface-200 rounded"></div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="card p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold mb-1">WhatsApp Commerce Settings</h3>
+          <p className="text-sm text-surface-500">Control catalog visibility and cart settings</p>
+        </div>
+        <button 
+          onClick={() => refetch()}
+          className="btn btn-ghost btn-sm"
+        >
+          <RefreshCw className="w-4 h-4" />
+        </button>
+      </div>
+
+      {!commerceSettings ? (
+        <div className="p-4 rounded-xl bg-amber-50 text-amber-700">
+          <p className="font-medium">⚠️ Commerce settings not available</p>
+          <p className="text-sm mt-1">
+            Make sure WHATSAPP_PHONE_NUMBER_ID is configured in your backend .env file.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {/* Catalog Visibility Toggle */}
+          <div className="flex items-center justify-between p-4 rounded-xl bg-surface-50 border border-surface-200">
+            <div className="flex items-center gap-4">
+              {commerceSettings.is_catalog_visible ? (
+                <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                  <Eye className="w-5 h-5 text-green-600" />
+                </div>
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-surface-200 flex items-center justify-center">
+                  <EyeOff className="w-5 h-5 text-surface-500" />
+                </div>
+              )}
+              <div>
+                <p className="font-medium text-surface-900">Catalog Visibility on Profile</p>
+                <p className="text-sm text-surface-500">
+                  {commerceSettings.is_catalog_visible 
+                    ? 'Catalog is visible on your WhatsApp Business profile'
+                    : 'Catalog is hidden from your WhatsApp Business profile'}
+                </p>
+              </div>
+            </div>
+            <label className="relative inline-flex cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={commerceSettings.is_catalog_visible || false}
+                onChange={toggleCatalogVisibility}
+                disabled={updateSettings.isPending}
+                className="sr-only peer" 
+              />
+              <div className="w-11 h-6 bg-surface-300 peer-checked:bg-primary-500 rounded-full peer-focus:ring-2 peer-focus:ring-primary-300 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5" />
+            </label>
+          </div>
+
+          {/* Cart Toggle */}
+          <div className="flex items-center justify-between p-4 rounded-xl bg-surface-50 border border-surface-200">
+            <div className="flex items-center gap-4">
+              <div className={clsx(
+                "w-10 h-10 rounded-full flex items-center justify-center",
+                commerceSettings.is_cart_enabled ? "bg-green-100" : "bg-surface-200"
+              )}>
+                <ShoppingCart className={clsx(
+                  "w-5 h-5",
+                  commerceSettings.is_cart_enabled ? "text-green-600" : "text-surface-500"
+                )} />
+              </div>
+              <div>
+                <p className="font-medium text-surface-900">Shopping Cart</p>
+                <p className="text-sm text-surface-500">
+                  {commerceSettings.is_cart_enabled 
+                    ? 'Customers can add items to cart in chat'
+                    : 'Cart functionality is disabled'}
+                </p>
+              </div>
+            </div>
+            <label className="relative inline-flex cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={commerceSettings.is_cart_enabled || false}
+                onChange={toggleCart}
+                disabled={updateSettings.isPending}
+                className="sr-only peer" 
+              />
+              <div className="w-11 h-6 bg-surface-300 peer-checked:bg-primary-500 rounded-full peer-focus:ring-2 peer-focus:ring-primary-300 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5" />
+            </label>
+          </div>
+
+          {/* Info Box */}
+          <div className="p-4 rounded-xl bg-blue-50 text-blue-700 text-sm">
+            <p className="font-medium mb-2">💡 How it works</p>
+            <ul className="space-y-1 text-blue-600">
+              <li>• <strong>Catalog Hidden:</strong> Products won't show on your WhatsApp profile, but you can still send product messages via chat</li>
+              <li>• <strong>Cart Enabled:</strong> Customers can add multiple items before checkout</li>
+              <li>• Product Messages (SPM) and Multi-Product Messages (MPM) work regardless of these settings</li>
+            </ul>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

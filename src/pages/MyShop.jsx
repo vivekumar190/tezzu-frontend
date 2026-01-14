@@ -645,40 +645,46 @@ export default function MyShop() {
       )}
 
       {activeTab === 'settings' && (
-        <div className="card p-6 space-y-6">
-          <h3 className="text-lg font-semibold text-surface-900">Shop Settings</h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-2">Minimum Order Amount</label>
-              <p className="text-2xl font-bold text-surface-900">₹{merchant?.minimumOrderAmount || 0}</p>
-              <p className="text-sm text-surface-500 mt-1">Customers must order at least this amount</p>
+        <div className="space-y-6">
+          {/* General Settings */}
+          <div className="card p-6 space-y-6">
+            <h3 className="text-lg font-semibold text-surface-900">Shop Settings</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-2">Minimum Order Amount</label>
+                <p className="text-2xl font-bold text-surface-900">₹{merchant?.minimumOrderAmount || 0}</p>
+                <p className="text-sm text-surface-500 mt-1">Customers must order at least this amount</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-2">Delivery Charges</label>
+                <p className="text-2xl font-bold text-surface-900">₹{merchant?.deliveryCharges || 0}</p>
+                <p className="text-sm text-surface-500 mt-1">Added to each order</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-2">Average Delivery Time</label>
+                <p className="text-2xl font-bold text-surface-900">{merchant?.averageDeliveryTime || 30} mins</p>
+                <p className="text-sm text-surface-500 mt-1">Shown to customers</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-2">Operating Hours</label>
+                <p className="text-2xl font-bold text-surface-900">
+                  {merchant?.operatingHours?.open || '09:00'} - {merchant?.operatingHours?.close || '22:00'}
+                </p>
+                <p className="text-sm text-surface-500 mt-1">When you accept orders</p>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-2">Delivery Charges</label>
-              <p className="text-2xl font-bold text-surface-900">₹{merchant?.deliveryCharges || 0}</p>
-              <p className="text-sm text-surface-500 mt-1">Added to each order</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-2">Average Delivery Time</label>
-              <p className="text-2xl font-bold text-surface-900">{merchant?.averageDeliveryTime || 30} mins</p>
-              <p className="text-sm text-surface-500 mt-1">Shown to customers</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-2">Operating Hours</label>
-              <p className="text-2xl font-bold text-surface-900">
-                {merchant?.operatingHours?.open || '09:00'} - {merchant?.operatingHours?.close || '22:00'}
-              </p>
-              <p className="text-sm text-surface-500 mt-1">When you accept orders</p>
+
+            <div className="pt-4 border-t">
+              <button onClick={() => setShowEditModal(true)} className="btn btn-primary">
+                <Edit className="w-4 h-4" />
+                Edit Settings
+              </button>
             </div>
           </div>
 
-          <div className="pt-4 border-t">
-            <button onClick={() => setShowEditModal(true)} className="btn btn-primary">
-              <Edit className="w-4 h-4" />
-              Edit Settings
-            </button>
-          </div>
+          {/* Catalog Settings */}
+          <MerchantCatalogSettings merchantId={merchantId} catalog={merchant?.catalog} />
         </div>
       )}
 
@@ -1155,6 +1161,182 @@ function EditShopModal({ merchant, onClose, onSuccess }) {
           </div>
         </form>
       </div>
+    </div>
+  )
+}
+
+// Merchant Catalog Settings Component
+function MerchantCatalogSettings({ merchantId, catalog }) {
+  const [catalogId, setCatalogId] = useState(catalog?.catalogId || '')
+  const [isEnabled, setIsEnabled] = useState(catalog?.isEnabled || false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const queryClient = useQueryClient()
+
+  // Fetch catalog status
+  const { data: catalogStatus, isLoading } = useQuery({
+    queryKey: ['merchant-catalog', merchantId],
+    queryFn: async () => {
+      const res = await api.get(`/merchants/${merchantId}/catalog`)
+      return res.data.data
+    },
+    enabled: !!merchantId
+  })
+
+  const handleSave = async () => {
+    setIsSubmitting(true)
+    try {
+      await api.patch(`/merchants/${merchantId}/catalog`, {
+        catalogId: catalogId || null,
+        isEnabled
+      })
+      queryClient.invalidateQueries(['merchant-catalog', merchantId])
+      queryClient.invalidateQueries(['my-merchant', merchantId])
+      toast.success('Catalog settings saved!')
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to save catalog settings')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="card p-6">
+        <div className="animate-pulse space-y-4">
+          <div className="h-6 bg-surface-200 rounded w-1/3"></div>
+          <div className="h-10 bg-surface-200 rounded"></div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="card p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-surface-900">WhatsApp Catalog</h3>
+          <p className="text-sm text-surface-500">
+            Configure your Meta Commerce Catalog for WhatsApp shopping
+          </p>
+        </div>
+        <div className={clsx(
+          'px-3 py-1 rounded-full text-sm font-medium',
+          catalogStatus?.catalog?.isEnabled
+            ? 'bg-green-100 text-green-700'
+            : 'bg-surface-100 text-surface-600'
+        )}>
+          {catalogStatus?.catalog?.isEnabled ? '✓ Enabled' : 'Disabled'}
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-surface-700 mb-2">
+            Meta Catalog ID
+          </label>
+          <input
+            type="text"
+            value={catalogId}
+            onChange={(e) => setCatalogId(e.target.value)}
+            placeholder="e.g., 1501528984260687"
+            className="input"
+          />
+          <p className="text-xs text-surface-500 mt-1">
+            Find this in Meta Business Suite → Commerce Manager → Catalog
+          </p>
+        </div>
+
+        <div className="flex items-center justify-between p-4 bg-surface-50 rounded-lg">
+          <div>
+            <p className="font-medium text-surface-900">Enable Catalog</p>
+            <p className="text-sm text-surface-500">
+              Show products with images in WhatsApp
+            </p>
+          </div>
+          <button
+            onClick={() => setIsEnabled(!isEnabled)}
+            className={clsx(
+              'relative w-12 h-6 rounded-full transition-colors',
+              isEnabled ? 'bg-primary-500' : 'bg-surface-300'
+            )}
+          >
+            <span className={clsx(
+              'absolute top-1 w-4 h-4 bg-white rounded-full transition-transform',
+              isEnabled ? 'translate-x-7' : 'translate-x-1'
+            )} />
+          </button>
+        </div>
+
+        {catalogStatus?.products && (
+          <div className="grid grid-cols-3 gap-4 p-4 bg-surface-50 rounded-lg">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-surface-900">
+                {catalogStatus.products.total}
+              </p>
+              <p className="text-xs text-surface-500">Total Products</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-green-600">
+                {catalogStatus.products.synced}
+              </p>
+              <p className="text-xs text-surface-500">Synced</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-amber-600">
+                {catalogStatus.products.pending}
+              </p>
+              <p className="text-xs text-surface-500">Pending</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-3 pt-4 border-t">
+        <button
+          onClick={handleSave}
+          disabled={isSubmitting}
+          className="btn btn-primary"
+        >
+          {isSubmitting ? (
+            <>
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            <>
+              <Save className="w-4 h-4" />
+              Save Settings
+            </>
+          )}
+        </button>
+        {catalogId && (
+          <a
+            href={`https://business.facebook.com/commerce/catalogs/${catalogId}/products`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-secondary"
+          >
+            View in Meta
+            <ChevronRight className="w-4 h-4" />
+          </a>
+        )}
+      </div>
+
+      {!catalogId && (
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+          <p className="text-sm text-amber-800">
+            <strong>Need a catalog?</strong> You can use the global catalog or create your own in{' '}
+            <a 
+              href="https://business.facebook.com/commerce/catalogs" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="underline"
+            >
+              Meta Commerce Manager
+            </a>
+          </p>
+        </div>
+      )}
     </div>
   )
 }

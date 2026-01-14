@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { 
   Search, 
@@ -20,22 +20,18 @@ import CatalogSync from '../components/CatalogSync'
 export default function Products() {
   const { user } = useAuthStore()
   const isMerchantAdmin = user?.role === 'merchant_admin'
+  const queryClient = useQueryClient()
+  
+  // Get merchant ID - for merchant_admin, use their assigned merchant
+  const userMerchantId = isMerchantAdmin && user?.merchant
+    ? (typeof user.merchant === 'object' ? user.merchant._id : user.merchant)
+    : null
+  
   const [search, setSearch] = useState('')
   const [selectedMerchant, setSelectedMerchant] = useState('')
-  const queryClient = useQueryClient()
 
-  // Auto-select merchant for merchant_admin users
-  useEffect(() => {
-    if (isMerchantAdmin && user?.merchant) {
-      // Handle both cases: merchant as object or string ID
-      const merchantId = typeof user.merchant === 'object' 
-        ? user.merchant._id 
-        : user.merchant
-      if (merchantId) {
-        setSelectedMerchant(merchantId)
-      }
-    }
-  }, [isMerchantAdmin, user?.merchant])
+  // The effective merchant ID (user's own or selected)
+  const effectiveMerchantId = isMerchantAdmin ? userMerchantId : selectedMerchant
 
   const { data: merchants } = useQuery({
     queryKey: ['merchants'],
@@ -46,20 +42,19 @@ export default function Products() {
     enabled: !isMerchantAdmin // Only fetch for admin users
   })
 
-  const { data: products, isLoading } = useQuery({
-    queryKey: ['products', selectedMerchant],
+  const { data: products, isLoading, isFetching } = useQuery({
+    queryKey: ['products', effectiveMerchantId],
     queryFn: async () => {
-      if (!selectedMerchant) return []
-      const res = await api.get(`/products/merchant/${selectedMerchant}?limit=100`)
+      const res = await api.get(`/products/merchant/${effectiveMerchantId}?limit=100`)
       return res.data.data.products
     },
-    enabled: !!selectedMerchant
+    enabled: !!effectiveMerchantId
   })
 
   const toggleAvailability = useMutation({
     mutationFn: (productId) => api.patch(`/products/${productId}/toggle-availability`),
     onSuccess: () => {
-      queryClient.invalidateQueries(['products', selectedMerchant])
+      queryClient.invalidateQueries(['products', effectiveMerchantId])
       toast.success('Product availability updated')
     }
   })
@@ -68,7 +63,7 @@ export default function Products() {
   const syncProduct = useMutation({
     mutationFn: (productId) => api.post(`/catalog/sync/product/${productId}`),
     onSuccess: (data) => {
-      queryClient.invalidateQueries(['products', selectedMerchant])
+      queryClient.invalidateQueries(['products', effectiveMerchantId])
       queryClient.invalidateQueries(['catalog-sync-status'])
       toast.success('Product synced to catalog!')
     },
@@ -108,7 +103,7 @@ export default function Products() {
             </select>
           )}
 
-          {selectedMerchant && (
+          {effectiveMerchantId && (
             <div className="flex-1 min-w-[200px]">
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-surface-400" />
@@ -126,26 +121,32 @@ export default function Products() {
       </div>
 
       {/* Catalog Sync - Show when merchant is selected */}
-      {selectedMerchant && (
+      {effectiveMerchantId && (
         <CatalogSync 
-          merchantId={selectedMerchant} 
-          merchantName={isMerchantAdmin ? user?.merchant?.name : merchants?.find(m => m._id === selectedMerchant)?.name}
+          merchantId={effectiveMerchantId} 
+          merchantName={isMerchantAdmin ? user?.merchant?.name : merchants?.find(m => m._id === effectiveMerchantId)?.name}
           compact={true}
         />
       )}
 
       {/* Products Table */}
-      {!selectedMerchant ? (
+      {!effectiveMerchantId ? (
         <div className="card p-12 text-center">
           <Package className="w-16 h-16 mx-auto mb-4 text-surface-300" />
-          <h3 className="text-lg font-medium text-surface-900 mb-2">
-            {isMerchantAdmin ? 'Loading your products...' : 'Select a merchant'}
-          </h3>
-          <p className="text-surface-500">
-            {isMerchantAdmin ? 'Please wait...' : 'Choose a merchant to view their products'}
-          </p>
+          {isMerchantAdmin ? (
+            <>
+              <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-surface-900 mb-2">Loading your products...</h3>
+              <p className="text-surface-500">Please wait...</p>
+            </>
+          ) : (
+            <>
+              <h3 className="text-lg font-medium text-surface-900 mb-2">Select a merchant</h3>
+              <p className="text-surface-500">Choose a merchant to view their products</p>
+            </>
+          )}
         </div>
-      ) : isLoading ? (
+      ) : (isLoading || isFetching) ? (
         <div className="card overflow-hidden">
           <table className="w-full">
             <thead className="bg-surface-50">

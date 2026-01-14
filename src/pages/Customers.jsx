@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Users, Search, MapPin, ShoppingBag, TrendingUp, 
   Phone, Calendar, Eye, Tag, MessageSquare, ChevronDown,
-  UserCheck, Clock, IndianRupee, Filter, X, Map
+  UserCheck, Clock, IndianRupee, Filter, X, Map, RefreshCw
 } from 'lucide-react';
 import api from '../lib/api';
 
@@ -465,6 +465,7 @@ export default function Customers() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [showZoneReport, setShowZoneReport] = useState(false);
   const [filters, setFilters] = useState({
     hasOrders: false,
     hasLocation: false,
@@ -497,6 +498,12 @@ export default function Customers() {
     queryFn: () => api.get('/customers/top?limit=5').then(r => r.data.data)
   });
 
+  const { data: zoneReport, isLoading: zoneLoading, refetch: refetchZones } = useQuery({
+    queryKey: ['zone-matching-report'],
+    queryFn: () => api.get('/customers/zone-matching/report').then(r => r.data.data),
+    enabled: showZoneReport
+  });
+
   return (
     <div className="p-6">
       {/* Header */}
@@ -505,7 +512,125 @@ export default function Customers() {
           <h1 className="text-2xl font-bold text-gray-900">Customers</h1>
           <p className="text-gray-500">Manage your customer database</p>
         </div>
+        <button
+          onClick={() => setShowZoneReport(!showZoneReport)}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+            showZoneReport 
+              ? 'bg-purple-500 text-white' 
+              : 'bg-purple-50 text-purple-600 hover:bg-purple-100'
+          }`}
+        >
+          <Map className="w-5 h-5" />
+          Zone Matching
+        </button>
       </div>
+
+      {/* Zone Matching Report */}
+      {showZoneReport && (
+        <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl border border-purple-200 p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <Map className="w-5 h-5 text-purple-500" />
+              Customer Zone Matching Report
+            </h2>
+            <button
+              onClick={() => refetchZones()}
+              className="text-sm text-purple-600 hover:text-purple-700"
+            >
+              Refresh
+            </button>
+          </div>
+
+          {zoneLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : zoneReport ? (
+            <div className="space-y-4">
+              {/* Summary Stats */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-white rounded-lg p-4 shadow-sm">
+                  <p className="text-3xl font-bold text-gray-900">{zoneReport.summary.totalCustomers}</p>
+                  <p className="text-sm text-gray-500">Total with Location</p>
+                </div>
+                <div className="bg-white rounded-lg p-4 shadow-sm">
+                  <p className="text-3xl font-bold text-green-600">{zoneReport.summary.inZone}</p>
+                  <p className="text-sm text-gray-500">In Delivery Zone</p>
+                </div>
+                <div className="bg-white rounded-lg p-4 shadow-sm">
+                  <p className="text-3xl font-bold text-red-500">{zoneReport.summary.outOfZone}</p>
+                  <p className="text-sm text-gray-500">Outside Zones</p>
+                </div>
+                <div className="bg-white rounded-lg p-4 shadow-sm">
+                  <p className="text-3xl font-bold text-purple-600">{zoneReport.summary.coverage}%</p>
+                  <p className="text-sm text-gray-500">Coverage Rate</p>
+                </div>
+              </div>
+
+              {/* Breakdown by Zone and Merchant */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Zone Breakdown */}
+                <div className="bg-white rounded-lg p-4 shadow-sm">
+                  <h3 className="font-medium text-gray-900 mb-3">📍 Customers by Zone</h3>
+                  {zoneReport.zoneBreakdown.length > 0 ? (
+                    <div className="space-y-2">
+                      {zoneReport.zoneBreakdown.map((item, idx) => (
+                        <div key={idx} className="flex items-center justify-between">
+                          <span className="text-sm text-gray-600">{item.zone}</span>
+                          <span className="font-medium text-gray-900">{item.customers}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">No zone data available</p>
+                  )}
+                </div>
+
+                {/* Merchant Breakdown */}
+                <div className="bg-white rounded-lg p-4 shadow-sm">
+                  <h3 className="font-medium text-gray-900 mb-3">🏪 Customers per Restaurant</h3>
+                  {zoneReport.merchantBreakdown.length > 0 ? (
+                    <div className="space-y-2">
+                      {zoneReport.merchantBreakdown.map((item, idx) => (
+                        <div key={idx} className="flex items-center justify-between">
+                          <span className="text-sm text-gray-600">{item.merchant}</span>
+                          <span className="font-medium text-gray-900">{item.customers}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">No merchant data available</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Customers outside zones */}
+              {zoneReport.customers.filter(c => !c.isInZone).length > 0 && (
+                <div className="bg-white rounded-lg p-4 shadow-sm">
+                  <h3 className="font-medium text-red-600 mb-3">⚠️ Customers Outside Delivery Zones</h3>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {zoneReport.customers.filter(c => !c.isInZone).map((customer, idx) => (
+                      <div key={idx} className="flex items-center justify-between text-sm py-1 border-b border-gray-100 last:border-0">
+                        <div>
+                          <span className="font-medium text-gray-900">{customer.name}</span>
+                          <span className="text-gray-500 ml-2">{customer.phone}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-gray-500">{customer.stats?.totalOrders || 0} orders</span>
+                          <span className="text-gray-400 mx-1">•</span>
+                          <span className="text-gray-500">₹{customer.stats?.totalSpent || 0}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-center py-4">Click Refresh to load zone matching data</p>
+          )}
+        </div>
+      )}
 
       {/* Stats */}
       <StatsCards stats={stats} />
