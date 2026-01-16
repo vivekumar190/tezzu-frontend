@@ -13,7 +13,9 @@ import {
   ToggleRight,
   Trash2,
   Edit,
-  ExternalLink
+  ExternalLink,
+  Target,
+  Circle
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
@@ -246,6 +248,32 @@ function MerchantCard({ merchant, onToggleStatus, onDelete, onEdit }) {
             {merchant.whatsappNumber}
           </div>
         </div>
+
+        {/* Delivery Zones Indicator */}
+        {merchant.useLocationBasedOrdering && (
+          <div className="mt-3 p-2 bg-primary-50 rounded-lg">
+            <div className="flex items-center gap-2 text-sm">
+              <Target className="w-4 h-4 text-primary-500" />
+              <span className="text-primary-700 font-medium">
+                {merchant.deliveryZones?.filter(z => z.isActive).length || 0} active zone{merchant.deliveryZones?.filter(z => z.isActive).length !== 1 ? 's' : ''}
+              </span>
+              {merchant.deliveryZones?.length > 0 && (
+                <span className="text-primary-500 text-xs">
+                  ({merchant.deliveryZones.length} total)
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {!merchant.useLocationBasedOrdering && (
+          <div className="mt-3 p-2 bg-surface-50 rounded-lg">
+            <div className="flex items-center gap-2 text-sm text-surface-500">
+              <Circle className="w-4 h-4" />
+              <span>No delivery zones</span>
+            </div>
+          </div>
+        )}
 
         {/* Stats */}
         <div className="flex items-center gap-4 mt-4 pt-4 border-t border-surface-100">

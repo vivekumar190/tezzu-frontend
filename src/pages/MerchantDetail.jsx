@@ -19,7 +19,14 @@ import {
   Target,
   Layers,
   Save,
-  RefreshCw
+  RefreshCw,
+  Image,
+  X,
+  Circle,
+  ToggleLeft,
+  ToggleRight,
+  ExternalLink,
+  AlertTriangle
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
@@ -492,10 +499,84 @@ function ProductModal({ merchantId, categories, product, onClose }) {
     category: product?.category?._id || product?.category || categories[0]?._id || '',
     price: product?.price || '',
     isVeg: product?.isVeg ?? true,
-    preparationTime: product?.preparationTime || 15
+    preparationTime: product?.preparationTime || 15,
+    imageUrl: product?.imageUrl || ''
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [dragActive, setDragActive] = useState(false)
   const queryClient = useQueryClient()
+
+  const handleImageUpload = async (file) => {
+    if (!file) return
+    
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+    if (!validTypes.includes(file.type)) {
+      toast.error('Please upload a valid image (JPEG, PNG, GIF, or WebP)')
+      return
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size must be less than 5MB')
+      return
+    }
+
+    setIsUploading(true)
+    setUploadProgress(10)
+
+    try {
+      const formDataUpload = new FormData()
+      formDataUpload.append('image', file)
+
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => Math.min(prev + 10, 90))
+      }, 200)
+
+      const response = await api.post('/uploads/image', formDataUpload, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+
+      clearInterval(progressInterval)
+      setUploadProgress(100)
+
+      if (response.data.success) {
+        setFormData(prev => ({ ...prev, imageUrl: response.data.data.url }))
+        toast.success('Image uploaded successfully!')
+      }
+    } catch (error) {
+      console.error('Upload error:', error)
+      toast.error(error.response?.data?.error || 'Failed to upload image')
+    } finally {
+      setIsUploading(false)
+      setUploadProgress(0)
+    }
+  }
+
+  const handleDrag = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true)
+    } else if (e.type === 'dragleave') {
+      setDragActive(false)
+    }
+  }
+
+  const handleDrop = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragActive(false)
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleImageUpload(e.dataTransfer.files[0])
+    }
+  }
+
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      handleImageUpload(e.target.files[0])
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -591,6 +672,85 @@ function ProductModal({ merchantId, categories, product, onClose }) {
             </div>
           </div>
 
+          {/* Image Upload Section */}
+          <div>
+            <label className="label">Product Image</label>
+            
+            {formData.imageUrl && (
+              <div className="relative mb-3 inline-block">
+                <img 
+                  src={formData.imageUrl} 
+                  alt="Product preview" 
+                  className="w-24 h-24 object-cover rounded-xl border-2 border-surface-200"
+                  onError={(e) => { e.target.src = 'https://via.placeholder.com/96?text=Error' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, imageUrl: '' })}
+                  className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+
+            {!formData.imageUrl && (
+              <div
+                onDragEnter={handleDrag}
+                onDragLeave={handleDrag}
+                onDragOver={handleDrag}
+                onDrop={handleDrop}
+                className={clsx(
+                  'relative border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all',
+                  dragActive 
+                    ? 'border-primary-500 bg-primary-50' 
+                    : 'border-surface-300 hover:border-primary-400 hover:bg-surface-50',
+                  isUploading && 'pointer-events-none opacity-60'
+                )}
+                onClick={() => document.getElementById('product-image-input-detail').click()}
+              >
+                <input
+                  id="product-image-input-detail"
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+                
+                {isUploading ? (
+                  <div className="space-y-2">
+                    <RefreshCw className="w-6 h-6 mx-auto text-primary-500 animate-spin" />
+                    <p className="text-xs text-surface-600">Uploading...</p>
+                    <div className="w-full bg-surface-200 rounded-full h-1.5">
+                      <div 
+                        className="bg-primary-500 h-1.5 rounded-full transition-all duration-300"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <Image className="w-8 h-8 mx-auto text-surface-400" />
+                    <p className="text-xs text-surface-600">
+                      {dragActive ? 'Drop here' : 'Click or drag to upload'}
+                    </p>
+                    <p className="text-xs text-surface-400">Max 5MB</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="mt-2">
+              <input
+                type="url"
+                value={formData.imageUrl}
+                onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
+                className="input text-sm"
+                placeholder="Or enter image URL..."
+              />
+            </div>
+          </div>
+
           <div>
             <label className="label">Food Type</label>
             <div className="flex gap-4">
@@ -621,7 +781,7 @@ function ProductModal({ merchantId, categories, product, onClose }) {
 
           <div className="flex justify-end gap-3 pt-4">
             <button type="button" onClick={onClose} className="btn btn-secondary">Cancel</button>
-            <button type="submit" disabled={isSubmitting} className="btn btn-primary">
+            <button type="submit" disabled={isSubmitting || isUploading} className="btn btn-primary">
               {isSubmitting ? 'Saving...' : 'Save'}
             </button>
           </div>
@@ -1007,6 +1167,13 @@ function LocationSettings({ merchant, merchantId }) {
         </div>
       </div>
 
+      {/* Existing Delivery Zones */}
+      <DeliveryZonesDisplay 
+        merchant={merchant} 
+        merchantId={merchantId}
+        onZoneDeleted={() => queryClient.invalidateQueries(['merchant', merchantId])}
+      />
+
       {/* Save Button */}
       <div className="flex justify-end">
         <button
@@ -1043,6 +1210,213 @@ function LocationSettings({ merchant, merchantId }) {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+// Delivery Zones Display Component
+function DeliveryZonesDisplay({ merchant, merchantId, onZoneDeleted }) {
+  const [deletingZone, setDeletingZone] = useState(null)
+
+  const zones = merchant?.deliveryZones || []
+
+  // Calculate zone coverage area from polygon coordinates
+  const getZoneCoverage = (zone) => {
+    if (!zone.area?.coordinates?.[0]) return null
+    
+    const coords = zone.area.coordinates[0]
+    const lngs = coords.map(c => c[0])
+    const lats = coords.map(c => c[1])
+    
+    const minLng = Math.min(...lngs)
+    const maxLng = Math.max(...lngs)
+    const minLat = Math.min(...lats)
+    const maxLat = Math.max(...lats)
+    
+    // Approximate area calculation
+    const latDiff = maxLat - minLat
+    const lngDiff = maxLng - minLng
+    const avgLat = (maxLat + minLat) / 2
+    
+    // Convert to km (approximate)
+    const latKm = latDiff * 111
+    const lngKm = lngDiff * 111 * Math.cos(avgLat * Math.PI / 180)
+    const areaKm2 = Math.round(latKm * lngKm)
+    
+    // Center point
+    const centerLat = (minLat + maxLat) / 2
+    const centerLng = (minLng + maxLng) / 2
+    
+    return {
+      area: areaKm2,
+      center: { lat: centerLat, lng: centerLng },
+      bounds: { minLat, maxLat, minLng, maxLng }
+    }
+  }
+
+  const handleDeleteZone = async (zoneId) => {
+    if (!confirm('Are you sure you want to delete this delivery zone?')) return
+    
+    setDeletingZone(zoneId)
+    try {
+      await api.delete(`/zones/${merchantId}/${zoneId}`)
+      toast.success('Zone deleted successfully')
+      onZoneDeleted?.()
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to delete zone')
+    } finally {
+      setDeletingZone(null)
+    }
+  }
+
+  const handleToggleZone = async (zoneId, currentStatus) => {
+    try {
+      await api.patch(`/zones/${merchantId}/${zoneId}/toggle`)
+      toast.success(`Zone ${currentStatus ? 'deactivated' : 'activated'}`)
+      onZoneDeleted?.() // Refresh merchant data
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to toggle zone')
+    }
+  }
+
+  if (zones.length === 0) {
+    return (
+      <div className="card p-6 text-center">
+        <Circle className="w-12 h-12 mx-auto mb-3 text-surface-300" />
+        <h3 className="font-medium text-surface-900 mb-1">No Delivery Zones</h3>
+        <p className="text-sm text-surface-500">
+          Set your location and radius above to create a delivery zone
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-surface-900 flex items-center gap-2">
+          <Target className="w-5 h-5 text-primary-500" />
+          Delivery Zones ({zones.length})
+        </h3>
+      </div>
+
+      <div className="grid gap-4">
+        {zones.map((zone, index) => {
+          const coverage = getZoneCoverage(zone)
+          
+          return (
+            <div 
+              key={zone._id || index}
+              className={clsx(
+                'card p-4 border-l-4 transition-all',
+                zone.isActive 
+                  ? 'border-l-green-500 bg-green-50/30' 
+                  : 'border-l-surface-300 bg-surface-50/50 opacity-75'
+              )}
+            >
+              <div className="flex items-start justify-between gap-4">
+                {/* Zone Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-2">
+                    <h4 className="font-semibold text-surface-900 truncate">
+                      {zone.name || `Zone ${index + 1}`}
+                    </h4>
+                    <span className={clsx(
+                      'badge text-xs',
+                      zone.isActive ? 'badge-success' : 'badge-gray'
+                    )}>
+                      {zone.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+
+                  {/* Zone Stats */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="w-4 h-4 text-surface-400" />
+                      <span className="text-surface-600">₹{zone.deliveryCharge || 0}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-surface-400" />
+                      <span className="text-surface-600">{zone.estimatedTime || 30} min</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Package className="w-4 h-4 text-surface-400" />
+                      <span className="text-surface-600">Min ₹{zone.minimumOrder || 0}</span>
+                    </div>
+                    {coverage && (
+                      <div className="flex items-center gap-2">
+                        <Layers className="w-4 h-4 text-surface-400" />
+                        <span className="text-surface-600">~{coverage.area} km²</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Coverage Details */}
+                  {coverage && (
+                    <div className="mt-3 p-2 bg-white/50 rounded-lg text-xs text-surface-500">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <MapPin className="w-3 h-3" />
+                        <span>Center: {coverage.center.lat.toFixed(4)}, {coverage.center.lng.toFixed(4)}</span>
+                        <a 
+                          href={`https://www.google.com/maps?q=${coverage.center.lat},${coverage.center.lng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary-600 hover:underline flex items-center gap-1"
+                        >
+                          View on Map <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Zone Actions */}
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => handleToggleZone(zone._id, zone.isActive)}
+                    className={clsx(
+                      'p-2 rounded-lg transition-colors',
+                      zone.isActive 
+                        ? 'bg-green-100 text-green-600 hover:bg-green-200' 
+                        : 'bg-surface-100 text-surface-500 hover:bg-surface-200'
+                    )}
+                    title={zone.isActive ? 'Deactivate zone' : 'Activate zone'}
+                  >
+                    {zone.isActive ? (
+                      <ToggleRight className="w-5 h-5" />
+                    ) : (
+                      <ToggleLeft className="w-5 h-5" />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => handleDeleteZone(zone._id)}
+                    disabled={deletingZone === zone._id}
+                    className="p-2 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors"
+                    title="Delete zone"
+                  >
+                    {deletingZone === zone._id ? (
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-5 h-5" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Warning for multiple zones */}
+      {zones.length > 1 && (
+        <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg text-sm text-amber-800">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span>
+            This merchant has {zones.length} delivery zones. Make sure they don't overlap incorrectly, 
+            as customers in overlapping areas will be matched to the first valid zone found.
+          </span>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { 
   Store, 
@@ -25,13 +25,17 @@ import {
   CheckCircle,
   AlertCircle,
   GripVertical,
-  ChevronRight
+  ChevronRight,
+  Target,
+  Navigation,
+  Layers,
+  Circle,
+  ExternalLink
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
 import clsx from 'clsx'
 import { useAuthStore } from '../store/authStore'
-import CatalogSync from '../components/CatalogSync'
 
 export default function MyShop() {
   const { user } = useAuthStore()
@@ -432,7 +436,7 @@ export default function MyShop() {
         <nav className="flex gap-8 overflow-x-auto">
           {[
             { id: 'menu', label: 'Menu & Products', icon: Package },
-            { id: 'catalog', label: 'Catalog Sync', icon: Image },
+            { id: 'location', label: 'Location & Zones', icon: MapPin },
             { id: 'settings', label: 'Settings', icon: Settings },
           ].map((tab) => (
             <button
@@ -636,11 +640,11 @@ export default function MyShop() {
         </div>
       )}
 
-      {activeTab === 'catalog' && (
-        <CatalogSync 
-          merchantId={merchantId} 
-          merchantName={merchant?.name}
-          compact={false}
+      {activeTab === 'location' && (
+        <MerchantLocationSettings 
+          merchant={merchant} 
+          merchantId={merchantId}
+          onUpdate={() => queryClient.invalidateQueries(['my-merchant', merchantId])}
         />
       )}
 
@@ -682,9 +686,6 @@ export default function MyShop() {
               </button>
             </div>
           </div>
-
-          {/* Catalog Settings */}
-          <MerchantCatalogSettings merchantId={merchantId} catalog={merchant?.catalog} />
         </div>
       )}
 
@@ -820,6 +821,85 @@ function ProductModal({ product, merchantId, categories, onClose, onSuccess }) {
     imageUrl: product?.imageUrl || ''
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [dragActive, setDragActive] = useState(false)
+  const fileInputRef = useState(null)
+
+  const handleImageUpload = async (file) => {
+    if (!file) return
+    
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+    if (!validTypes.includes(file.type)) {
+      toast.error('Please upload a valid image (JPEG, PNG, GIF, or WebP)')
+      return
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size must be less than 5MB')
+      return
+    }
+
+    setIsUploading(true)
+    setUploadProgress(10)
+
+    try {
+      const formDataUpload = new FormData()
+      formDataUpload.append('image', file)
+
+      // Simulate progress
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => Math.min(prev + 10, 90))
+      }, 200)
+
+      const response = await api.post('/uploads/image', formDataUpload, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })
+
+      clearInterval(progressInterval)
+      setUploadProgress(100)
+
+      if (response.data.success) {
+        setFormData(prev => ({ ...prev, imageUrl: response.data.data.url }))
+        toast.success('Image uploaded successfully!')
+      }
+    } catch (error) {
+      console.error('Upload error:', error)
+      toast.error(error.response?.data?.error || 'Failed to upload image')
+    } finally {
+      setIsUploading(false)
+      setUploadProgress(0)
+    }
+  }
+
+  const handleDrag = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true)
+    } else if (e.type === 'dragleave') {
+      setDragActive(false)
+    }
+  }
+
+  const handleDrop = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragActive(false)
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleImageUpload(e.dataTransfer.files[0])
+    }
+  }
+
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      handleImageUpload(e.target.files[0])
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -921,23 +1001,99 @@ function ProductModal({ product, merchantId, categories, onClose, onSuccess }) {
             </div>
           </div>
 
+          {/* Image Upload Section */}
           <div>
-            <label className="block text-sm font-medium text-surface-700 mb-1">Image URL</label>
-            <input
-              type="url"
-              value={formData.imageUrl}
-              onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-              className="input"
-              placeholder="https://..."
-            />
+            <label className="block text-sm font-medium text-surface-700 mb-2">Product Image</label>
+            
+            {/* Image Preview */}
             {formData.imageUrl && (
-              <img 
-                src={formData.imageUrl} 
-                alt="Preview" 
-                className="mt-2 w-20 h-20 object-cover rounded-lg"
-                onError={(e) => e.target.style.display = 'none'}
-              />
+              <div className="relative mb-3 inline-block">
+                <img 
+                  src={formData.imageUrl} 
+                  alt="Product preview" 
+                  className="w-32 h-32 object-cover rounded-xl border-2 border-surface-200"
+                  onError={(e) => {
+                    e.target.src = 'https://via.placeholder.com/128?text=Error'
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, imageUrl: '' })}
+                  className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             )}
+
+            {/* Upload Area */}
+            {!formData.imageUrl && (
+              <div
+                onDragEnter={handleDrag}
+                onDragLeave={handleDrag}
+                onDragOver={handleDrag}
+                onDrop={handleDrop}
+                className={clsx(
+                  'relative border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all',
+                  dragActive 
+                    ? 'border-primary-500 bg-primary-50' 
+                    : 'border-surface-300 hover:border-primary-400 hover:bg-surface-50',
+                  isUploading && 'pointer-events-none opacity-60'
+                )}
+                onClick={() => document.getElementById('product-image-input').click()}
+              >
+                <input
+                  id="product-image-input"
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+                
+                {isUploading ? (
+                  <div className="space-y-3">
+                    <RefreshCw className="w-8 h-8 mx-auto text-primary-500 animate-spin" />
+                    <p className="text-sm text-surface-600">Uploading...</p>
+                    <div className="w-full bg-surface-200 rounded-full h-2">
+                      <div 
+                        className="bg-primary-500 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="w-12 h-12 mx-auto rounded-full bg-primary-100 flex items-center justify-center">
+                      <Image className="w-6 h-6 text-primary-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-surface-700">
+                        {dragActive ? 'Drop image here' : 'Click to upload or drag & drop'}
+                      </p>
+                      <p className="text-xs text-surface-500 mt-1">
+                        JPEG, PNG, GIF, WebP (max 5MB)
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Manual URL Input */}
+            <div className="mt-3">
+              <div className="flex items-center gap-2 text-xs text-surface-500 mb-2">
+                <span className="flex-1 h-px bg-surface-200" />
+                <span>or enter URL</span>
+                <span className="flex-1 h-px bg-surface-200" />
+              </div>
+              <input
+                type="url"
+                value={formData.imageUrl}
+                onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
+                className="input text-sm"
+                placeholder="https://example.com/image.jpg"
+              />
+            </div>
           </div>
 
           <div className="flex gap-6">
@@ -965,7 +1121,11 @@ function ProductModal({ product, merchantId, categories, onClose, onSuccess }) {
             <button type="button" onClick={onClose} className="btn btn-secondary flex-1">
               Cancel
             </button>
-            <button type="submit" disabled={isSubmitting} className="btn btn-primary flex-1">
+            <button 
+              type="submit" 
+              disabled={isSubmitting || isUploading} 
+              className="btn btn-primary flex-1"
+            >
               {isSubmitting ? 'Saving...' : 'Save Product'}
             </button>
           </div>
@@ -1165,137 +1325,405 @@ function EditShopModal({ merchant, onClose, onSuccess }) {
   )
 }
 
-// Merchant Catalog Settings Component
-function MerchantCatalogSettings({ merchantId, catalog }) {
-  const [catalogId, setCatalogId] = useState(catalog?.catalogId || '')
-  const [isEnabled, setIsEnabled] = useState(catalog?.isEnabled || false)
+// Merchant Location Settings Component
+function MerchantLocationSettings({ merchant, merchantId, onUpdate }) {
+  const [latitude, setLatitude] = useState('')
+  const [longitude, setLongitude] = useState('')
+  const [radius, setRadius] = useState(5)
+  const [zoneName, setZoneName] = useState('')
+  const [deliveryCharge, setDeliveryCharge] = useState(30)
+  const [estimatedTime, setEstimatedTime] = useState(30)
+  const [minimumOrder, setMinimumOrder] = useState(100)
+  const [locationEnabled, setLocationEnabled] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [gettingLocation, setGettingLocation] = useState(false)
+  const [deletingZone, setDeletingZone] = useState(null)
   const queryClient = useQueryClient()
 
-  // Fetch catalog status
-  const { data: catalogStatus, isLoading } = useQuery({
-    queryKey: ['merchant-catalog', merchantId],
-    queryFn: async () => {
-      const res = await api.get(`/merchants/${merchantId}/catalog`)
-      return res.data.data
-    },
-    enabled: !!merchantId
-  })
+  // Initialize from merchant data
+  useEffect(() => {
+    if (merchant) {
+      if (merchant.location?.coordinates) {
+        setLongitude(merchant.location.coordinates[0]?.toString() || '')
+        setLatitude(merchant.location.coordinates[1]?.toString() || '')
+      }
+      setLocationEnabled(merchant.useLocationBasedOrdering || false)
+      
+      if (merchant.deliveryZones?.length > 0) {
+        const zone = merchant.deliveryZones[0]
+        setZoneName(zone.name || '')
+        setDeliveryCharge(zone.deliveryCharge || 30)
+        setEstimatedTime(zone.estimatedTime || 30)
+        setMinimumOrder(zone.minimumOrder || 100)
+      }
+    }
+  }, [merchant])
+
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocation not supported')
+      return
+    }
+
+    setGettingLocation(true)
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLatitude(position.coords.latitude.toFixed(6))
+        setLongitude(position.coords.longitude.toFixed(6))
+        setGettingLocation(false)
+        toast.success('Location detected!')
+      },
+      (error) => {
+        setGettingLocation(false)
+        toast.error('Failed to get location: ' + error.message)
+      },
+      { enableHighAccuracy: true }
+    )
+  }
+
+  const generateCircularZone = (centerLng, centerLat, radiusKm) => {
+    const points = 32
+    const coordinates = []
+    const earthRadius = 6371
+
+    for (let i = 0; i <= points; i++) {
+      const angle = (i / points) * 2 * Math.PI
+      const dLat = (radiusKm / earthRadius) * (180 / Math.PI)
+      const dLng = dLat / Math.cos(centerLat * Math.PI / 180)
+      const lat = centerLat + dLat * Math.sin(angle)
+      const lng = centerLng + dLng * Math.cos(angle)
+      coordinates.push([lng, lat])
+    }
+
+    if (coordinates.length > 0) {
+      coordinates.push(coordinates[0])
+    }
+
+    return { type: 'Polygon', coordinates: [coordinates] }
+  }
 
   const handleSave = async () => {
+    if (!latitude || !longitude) {
+      toast.error('Please enter location coordinates')
+      return
+    }
+
     setIsSubmitting(true)
+
     try {
-      await api.patch(`/merchants/${merchantId}/catalog`, {
-        catalogId: catalogId || null,
-        isEnabled
-      })
-      queryClient.invalidateQueries(['merchant-catalog', merchantId])
+      const lat = parseFloat(latitude)
+      const lng = parseFloat(longitude)
+      const zonePolygon = generateCircularZone(lng, lat, radius)
+
+      await api.put(`/zones/${merchantId}/location`, { latitude: lat, longitude: lng })
+
+      const zoneData = {
+        name: zoneName || `${radius}km Delivery Zone`,
+        area: zonePolygon,
+        deliveryCharge,
+        estimatedTime,
+        minimumOrder,
+        isActive: true
+      }
+
+      let existingZones = []
+      try {
+        const zonesRes = await api.get(`/zones/${merchantId}`)
+        existingZones = zonesRes.data?.data?.zones || []
+      } catch (e) {}
+
+      const existingAutoZone = existingZones.find(z => z.name?.includes('km Delivery Zone'))
+
+      if (existingAutoZone) {
+        await api.put(`/zones/${merchantId}/${existingAutoZone._id}`, zoneData)
+      } else {
+        await api.post(`/zones/${merchantId}`, zoneData)
+      }
+
+      const currentRes = await api.get(`/zones/${merchantId}`)
+      const currentEnabled = currentRes.data?.data?.useLocationBasedOrdering || false
+      
+      if (locationEnabled !== currentEnabled) {
+        await api.put(`/zones/${merchantId}/toggle`)
+      }
+
       queryClient.invalidateQueries(['my-merchant', merchantId])
-      toast.success('Catalog settings saved!')
+      onUpdate?.()
+      toast.success('Location settings saved!')
     } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to save catalog settings')
+      console.error('Error saving location:', error)
+      toast.error(error.response?.data?.error?.message || 'Failed to save location settings')
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  if (isLoading) {
-    return (
-      <div className="card p-6">
-        <div className="animate-pulse space-y-4">
-          <div className="h-6 bg-surface-200 rounded w-1/3"></div>
-          <div className="h-10 bg-surface-200 rounded"></div>
-        </div>
-      </div>
-    )
+  const handleDeleteZone = async (zoneId) => {
+    if (!confirm('Delete this delivery zone?')) return
+    
+    setDeletingZone(zoneId)
+    try {
+      await api.delete(`/zones/${merchantId}/${zoneId}`)
+      toast.success('Zone deleted')
+      queryClient.invalidateQueries(['my-merchant', merchantId])
+      onUpdate?.()
+    } catch (error) {
+      toast.error('Failed to delete zone')
+    } finally {
+      setDeletingZone(null)
+    }
   }
 
+  const handleToggleZone = async (zoneId, currentStatus) => {
+    try {
+      await api.patch(`/zones/${merchantId}/${zoneId}/toggle`)
+      toast.success(`Zone ${currentStatus ? 'deactivated' : 'activated'}`)
+      queryClient.invalidateQueries(['my-merchant', merchantId])
+      onUpdate?.()
+    } catch (error) {
+      toast.error('Failed to toggle zone')
+    }
+  }
+
+  const getZoneCoverage = (zone) => {
+    if (!zone.area?.coordinates?.[0]) return null
+    const coords = zone.area.coordinates[0]
+    const lngs = coords.map(c => c[0])
+    const lats = coords.map(c => c[1])
+    const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2
+    const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2
+    return { lat: centerLat, lng: centerLng }
+  }
+
+  const hasLocation = latitude && longitude
+  const zones = merchant?.deliveryZones || []
+
   return (
-    <div className="card p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-surface-900">WhatsApp Catalog</h3>
-          <p className="text-sm text-surface-500">
-            Configure your Meta Commerce Catalog for WhatsApp shopping
-          </p>
-        </div>
-        <div className={clsx(
-          'px-3 py-1 rounded-full text-sm font-medium',
-          catalogStatus?.catalog?.isEnabled
-            ? 'bg-green-100 text-green-700'
-            : 'bg-surface-100 text-surface-600'
-        )}>
-          {catalogStatus?.catalog?.isEnabled ? '✓ Enabled' : 'Disabled'}
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-surface-700 mb-2">
-            Meta Catalog ID
+    <div className="space-y-6">
+      {/* Status Card */}
+      <div className={clsx(
+        'card p-6 border-l-4',
+        locationEnabled && hasLocation ? 'border-l-green-500 bg-green-50/50' : 'border-l-amber-500 bg-amber-50/50'
+      )}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className={clsx(
+              'w-12 h-12 rounded-xl flex items-center justify-center',
+              locationEnabled && hasLocation ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-600'
+            )}>
+              <Target className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-surface-900">Location-Based Ordering</h3>
+              <p className="text-sm text-surface-500">
+                {locationEnabled && hasLocation 
+                  ? 'Customers in your delivery zone can find you' 
+                  : 'Set up location to enable zone-based delivery'}
+              </p>
+            </div>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={locationEnabled}
+              onChange={(e) => setLocationEnabled(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-surface-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-surface-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
           </label>
-          <input
-            type="text"
-            value={catalogId}
-            onChange={(e) => setCatalogId(e.target.value)}
-            placeholder="e.g., 1501528984260687"
-            className="input"
-          />
-          <p className="text-xs text-surface-500 mt-1">
-            Find this in Meta Business Suite → Commerce Manager → Catalog
-          </p>
         </div>
-
-        <div className="flex items-center justify-between p-4 bg-surface-50 rounded-lg">
-          <div>
-            <p className="font-medium text-surface-900">Enable Catalog</p>
-            <p className="text-sm text-surface-500">
-              Show products with images in WhatsApp
-            </p>
-          </div>
-          <button
-            onClick={() => setIsEnabled(!isEnabled)}
-            className={clsx(
-              'relative w-12 h-6 rounded-full transition-colors',
-              isEnabled ? 'bg-primary-500' : 'bg-surface-300'
-            )}
-          >
-            <span className={clsx(
-              'absolute top-1 w-4 h-4 bg-white rounded-full transition-transform',
-              isEnabled ? 'translate-x-7' : 'translate-x-1'
-            )} />
-          </button>
-        </div>
-
-        {catalogStatus?.products && (
-          <div className="grid grid-cols-3 gap-4 p-4 bg-surface-50 rounded-lg">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-surface-900">
-                {catalogStatus.products.total}
-              </p>
-              <p className="text-xs text-surface-500">Total Products</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-green-600">
-                {catalogStatus.products.synced}
-              </p>
-              <p className="text-xs text-surface-500">Synced</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-amber-600">
-                {catalogStatus.products.pending}
-              </p>
-              <p className="text-xs text-surface-500">Pending</p>
-            </div>
-          </div>
-        )}
       </div>
 
-      <div className="flex gap-3 pt-4 border-t">
+      <div className="grid lg:grid-cols-2 gap-6">
+        {/* Location Input */}
+        <div className="card p-6">
+          <h3 className="font-semibold text-surface-900 mb-4 flex items-center gap-2">
+            <MapPin className="w-5 h-5 text-primary-500" />
+            Shop Location
+          </h3>
+
+          <div className="space-y-4">
+            <button
+              onClick={getCurrentLocation}
+              disabled={gettingLocation}
+              className="w-full btn btn-secondary flex items-center justify-center gap-2"
+            >
+              {gettingLocation ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Getting location...
+                </>
+              ) : (
+                <>
+                  <Navigation className="w-4 h-4" />
+                  Use Current Location
+                </>
+              )}
+            </button>
+
+            <div className="text-center text-sm text-surface-400">or enter manually</div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">Latitude</label>
+                <input
+                  type="number"
+                  step="any"
+                  value={latitude}
+                  onChange={(e) => setLatitude(e.target.value)}
+                  className="input"
+                  placeholder="28.6139"
+                />
+              </div>
+              <div>
+                <label className="label">Longitude</label>
+                <input
+                  type="number"
+                  step="any"
+                  value={longitude}
+                  onChange={(e) => setLongitude(e.target.value)}
+                  className="input"
+                  placeholder="77.2090"
+                />
+              </div>
+            </div>
+
+            {hasLocation && (
+              <a 
+                href={`https://www.google.com/maps?q=${latitude},${longitude}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 p-3 bg-green-50 rounded-lg text-sm text-green-700 hover:bg-green-100 transition-colors"
+              >
+                <MapPin className="w-4 h-4" />
+                <span>View on Map: {parseFloat(latitude).toFixed(4)}, {parseFloat(longitude).toFixed(4)}</span>
+                <ExternalLink className="w-3 h-3 ml-auto" />
+              </a>
+            )}
+          </div>
+        </div>
+
+        {/* Delivery Radius */}
+        <div className="card p-6">
+          <h3 className="font-semibold text-surface-900 mb-4 flex items-center gap-2">
+            <Target className="w-5 h-5 text-primary-500" />
+            Delivery Radius
+          </h3>
+
+          <div className="space-y-4">
+            <div>
+              <label className="label">Select Radius</label>
+              <div className="grid grid-cols-4 gap-2">
+                {[2, 5, 10, 15].map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => setRadius(r)}
+                    className={clsx(
+                      'py-3 px-4 rounded-xl font-medium transition-all text-sm',
+                      radius === r
+                        ? 'bg-primary-600 text-white shadow-lg shadow-primary-500/25'
+                        : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
+                    )}
+                  >
+                    {r} km
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="label">Zone Name</label>
+              <input
+                type="text"
+                value={zoneName}
+                onChange={(e) => setZoneName(e.target.value)}
+                className="input"
+                placeholder={`${radius}km Delivery Zone`}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Delivery Settings */}
+        <div className="card p-6">
+          <h3 className="font-semibold text-surface-900 mb-4 flex items-center gap-2">
+            <Layers className="w-5 h-5 text-primary-500" />
+            Zone Settings
+          </h3>
+
+          <div className="space-y-4">
+            <div>
+              <label className="label">Delivery Charge (₹)</label>
+              <input
+                type="number"
+                value={deliveryCharge}
+                onChange={(e) => setDeliveryCharge(parseInt(e.target.value) || 0)}
+                className="input"
+                min={0}
+              />
+            </div>
+            <div>
+              <label className="label">Estimated Time (mins)</label>
+              <input
+                type="number"
+                value={estimatedTime}
+                onChange={(e) => setEstimatedTime(parseInt(e.target.value) || 30)}
+                className="input"
+                min={10}
+              />
+            </div>
+            <div>
+              <label className="label">Minimum Order (₹)</label>
+              <input
+                type="number"
+                value={minimumOrder}
+                onChange={(e) => setMinimumOrder(parseInt(e.target.value) || 0)}
+                className="input"
+                min={0}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Preview */}
+        <div className="card p-6">
+          <h3 className="font-semibold text-surface-900 mb-4">Summary</h3>
+          
+          <div className="space-y-3 text-sm">
+            <div className="flex justify-between py-2 border-b border-surface-100">
+              <span className="text-surface-500">Location</span>
+              <span className="font-medium">
+                {hasLocation ? `${parseFloat(latitude).toFixed(4)}, ${parseFloat(longitude).toFixed(4)}` : 'Not set'}
+              </span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-surface-100">
+              <span className="text-surface-500">Delivery Radius</span>
+              <span className="font-medium">{radius} km</span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-surface-100">
+              <span className="text-surface-500">Delivery Charge</span>
+              <span className="font-medium">₹{deliveryCharge}</span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-surface-100">
+              <span className="text-surface-500">Est. Time</span>
+              <span className="font-medium">{estimatedTime} mins</span>
+            </div>
+            <div className="flex justify-between py-2">
+              <span className="text-surface-500">Status</span>
+              <span className={clsx('font-medium', locationEnabled ? 'text-green-600' : 'text-amber-600')}>
+                {locationEnabled ? 'Enabled' : 'Disabled'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Save Button */}
+      <div className="flex justify-end">
         <button
           onClick={handleSave}
-          disabled={isSubmitting}
-          className="btn btn-primary"
+          disabled={isSubmitting || !hasLocation}
+          className="btn btn-primary flex items-center gap-2"
         >
           {isSubmitting ? (
             <>
@@ -1305,38 +1733,136 @@ function MerchantCatalogSettings({ merchantId, catalog }) {
           ) : (
             <>
               <Save className="w-4 h-4" />
-              Save Settings
+              Save Location Settings
             </>
           )}
         </button>
-        {catalogId && (
-          <a
-            href={`https://business.facebook.com/commerce/catalogs/${catalogId}/products`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn btn-secondary"
-          >
-            View in Meta
-            <ChevronRight className="w-4 h-4" />
-          </a>
-        )}
       </div>
 
-      {!catalogId && (
-        <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-          <p className="text-sm text-amber-800">
-            <strong>Need a catalog?</strong> You can use the global catalog or create your own in{' '}
-            <a 
-              href="https://business.facebook.com/commerce/catalogs" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="underline"
-            >
-              Meta Commerce Manager
-            </a>
+      {/* Existing Zones */}
+      {zones.length > 0 && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-surface-900 flex items-center gap-2">
+            <Target className="w-5 h-5 text-primary-500" />
+            Your Delivery Zones ({zones.length})
+          </h3>
+
+          <div className="grid gap-4">
+            {zones.map((zone, index) => {
+              const coverage = getZoneCoverage(zone)
+              
+              return (
+                <div 
+                  key={zone._id || index}
+                  className={clsx(
+                    'card p-4 border-l-4 transition-all',
+                    zone.isActive 
+                      ? 'border-l-green-500 bg-green-50/30' 
+                      : 'border-l-surface-300 bg-surface-50/50 opacity-75'
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h4 className="font-semibold text-surface-900">
+                          {zone.name || `Zone ${index + 1}`}
+                        </h4>
+                        <span className={clsx(
+                          'badge text-xs',
+                          zone.isActive ? 'badge-success' : 'badge-gray'
+                        )}>
+                          {zone.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                        <div className="flex items-center gap-2">
+                          <DollarSign className="w-4 h-4 text-surface-400" />
+                          <span className="text-surface-600">₹{zone.deliveryCharge || 0}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-surface-400" />
+                          <span className="text-surface-600">{zone.estimatedTime || 30} min</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Package className="w-4 h-4 text-surface-400" />
+                          <span className="text-surface-600">Min ₹{zone.minimumOrder || 0}</span>
+                        </div>
+                      </div>
+
+                      {coverage && (
+                        <a 
+                          href={`https://www.google.com/maps?q=${coverage.lat},${coverage.lng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-2 inline-flex items-center gap-1 text-xs text-primary-600 hover:underline"
+                        >
+                          <MapPin className="w-3 h-3" />
+                          View center on map
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={() => handleToggleZone(zone._id, zone.isActive)}
+                        className={clsx(
+                          'p-2 rounded-lg transition-colors',
+                          zone.isActive 
+                            ? 'bg-green-100 text-green-600 hover:bg-green-200' 
+                            : 'bg-surface-100 text-surface-500 hover:bg-surface-200'
+                        )}
+                        title={zone.isActive ? 'Deactivate' : 'Activate'}
+                      >
+                        {zone.isActive ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
+                      </button>
+                      <button
+                        onClick={() => handleDeleteZone(zone._id)}
+                        disabled={deletingZone === zone._id}
+                        className="p-2 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors"
+                        title="Delete zone"
+                      >
+                        {deletingZone === zone._id ? (
+                          <RefreshCw className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-5 h-5" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {zones.length === 0 && hasLocation && (
+        <div className="card p-6 text-center bg-blue-50">
+          <Circle className="w-12 h-12 mx-auto mb-3 text-blue-400" />
+          <h3 className="font-medium text-blue-900 mb-1">No Delivery Zones Yet</h3>
+          <p className="text-sm text-blue-700">
+            Click "Save Location Settings" above to create your first delivery zone
           </p>
         </div>
       )}
+
+      {/* WhatsApp Tip */}
+      <div className="card p-4 bg-blue-50 border-blue-200">
+        <div className="flex items-start gap-3">
+          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+            💡
+          </div>
+          <div>
+            <p className="font-medium text-blue-900">Tip: Update via WhatsApp</p>
+            <p className="text-sm text-blue-700 mt-1">
+              You can also update your location by sending "location" or "settings" on WhatsApp, 
+              then sharing your live location and selecting a delivery radius.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

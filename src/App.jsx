@@ -14,6 +14,7 @@ import Leads from './pages/Leads'
 import GeoMap from './pages/GeoMap'
 import Customers from './pages/Customers'
 import Settings from './pages/Settings'
+import LiveChat from './pages/LiveChat'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, isLoading } = useAuthStore()
@@ -54,6 +55,7 @@ export default function App() {
         <Route path="staff" element={<Staff />} />
         <Route path="users" element={<Users />} />
         <Route path="leads" element={<Leads />} />
+        <Route path="live-chat" element={<LiveChat />} />
         <Route path="geo-map" element={<GeoMap />} />
         <Route path="customers" element={<Customers />} />
         <Route path="settings" element={<Settings />} />
