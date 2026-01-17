@@ -36,7 +36,7 @@ export default function Products() {
   const { data: merchants } = useQuery({
     queryKey: ['merchants'],
     queryFn: async () => {
-      const res = await api.get('/merchants?limit=100&mode=all')
+      const res = await api.get('/merchants?limit=100&mode=all&includeInactive=true')
       return res.data.data.merchants
     },
     enabled: !isMerchantAdmin // Only fetch for admin users
@@ -68,7 +68,7 @@ export default function Products() {
       toast.success('Product synced to catalog!')
     },
     onError: (error) => {
-      toast.error(error.response?.data?.error || 'Failed to sync product')
+      toast.error(error.response?.data?.error?.message || 'Failed to sync product')
     }
   })
 

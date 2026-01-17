@@ -121,7 +121,7 @@ function CommerceSettings() {
       toast.success('Commerce settings updated!')
     },
     onError: (error) => {
-      toast.error(error.response?.data?.error || 'Failed to update settings')
+      toast.error(error.response?.data?.error?.message || 'Failed to update settings')
     }
   })
 

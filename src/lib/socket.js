@@ -5,6 +5,8 @@ import { useAuthStore } from '../store/authStore'
 const SOCKET_URL = import.meta.env.VITE_API_URL || undefined
 
 let socket = null
+let connectionAttempts = 0
+const MAX_SILENT_ATTEMPTS = 3
 
 export function initSocket() {
   const { token } = useAuthStore.getState()
@@ -15,24 +17,44 @@ export function initSocket() {
     return socket
   }
 
+  // Disconnect existing socket if any
+  if (socket) {
+    socket.disconnect()
+  }
+
   socket = io(SOCKET_URL, {
     auth: { token },
     transports: ['websocket', 'polling'],
     reconnection: true,
-    reconnectionAttempts: 5,
-    reconnectionDelay: 1000
+    reconnectionAttempts: 10,
+    reconnectionDelay: 2000,
+    reconnectionDelayMax: 10000,
+    timeout: 20000,
   })
 
   socket.on('connect', () => {
+    connectionAttempts = 0
     console.log('Socket connected:', socket.id)
   })
 
   socket.on('disconnect', (reason) => {
-    console.log('Socket disconnected:', reason)
+    // Only log unexpected disconnections
+    if (reason !== 'io client disconnect') {
+      console.log('Socket disconnected:', reason)
+    }
   })
 
   socket.on('connect_error', (error) => {
-    console.error('Socket connection error:', error.message)
+    connectionAttempts++
+    // Only log after several failed attempts to reduce noise
+    if (connectionAttempts > MAX_SILENT_ATTEMPTS) {
+      console.warn('Socket connection issue - will keep retrying...')
+    }
+  })
+
+  // Suppress internal errors
+  socket.io.on('error', () => {
+    // Silent - handled by connect_error
   })
 
   return socket

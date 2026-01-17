@@ -14,9 +14,11 @@ import {
   Menu,
   X,
   Bell,
-  MessageCircle
+  MessageCircle,
+  BookOpen
 } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
+import { useMemo } from 'react'
 import { initSocket, disconnectSocket } from '../lib/socket'
 import clsx from 'clsx'
 
@@ -33,13 +35,35 @@ const navigation = [
   { name: 'Live Chat', href: '/live-chat', icon: MessageCircle, adminOnly: true },
   { name: 'Geo Map', href: '/geo-map', icon: MapPin, adminOnly: true },
   { name: 'Settings', href: '/settings', icon: Settings },
+  { name: 'How It Works', href: '/how-it-works', icon: BookOpen },
 ]
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [notifications, setNotifications] = useState([])
-  const { user, logout } = useAuthStore()
+  const { user, logout, _hasHydrated } = useAuthStore()
   const navigate = useNavigate()
+  
+  // Get user role safely
+  const userRole = user?.role || null
+  const isAdmin = userRole === 'admin'
+  const isMerchantAdmin = userRole === 'merchant_admin'
+  
+  // Filter navigation items based on role
+  const filteredNavigation = useMemo(() => {
+    // Wait for hydration and user data
+    if (!_hasHydrated || !user) {
+      return navigation.filter(item => !item.adminOnly && !item.merchantOnly)
+    }
+    
+    return navigation.filter(item => {
+      // Admin-only pages
+      if (item.adminOnly && !isAdmin) return false
+      // Merchant-only pages  
+      if (item.merchantOnly && !isMerchantAdmin) return false
+      return true
+    })
+  }, [userRole, isAdmin, isMerchantAdmin, _hasHydrated, user])
 
   useEffect(() => {
     const socket = initSocket()
@@ -100,17 +124,9 @@ export default function Layout() {
 
           {/* Navigation */}
           <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-            {navigation
-              .filter(item => {
-                // Admin-only pages (like Merchants, Users, Leads)
-                if (item.adminOnly && user?.role !== 'admin') return false;
-                // Merchant-only pages (like Staff)
-                if (item.merchantOnly && user?.role !== 'merchant_admin') return false;
-                return true;
-              })
-              .map((item) => (
+            {filteredNavigation.map((item) => (
               <NavLink
-                key={item.name}
+                key={item.href}
                 to={item.href}
                 onClick={() => setSidebarOpen(false)}
                 className={({ isActive }) => clsx(

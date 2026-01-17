@@ -30,7 +30,7 @@ export default function Merchants() {
   const { data, isLoading } = useQuery({
     queryKey: ['merchants'],
     queryFn: async () => {
-      const res = await api.get('/merchants?limit=100&mode=all')
+      const res = await api.get('/merchants?limit=100&mode=all&includeInactive=true')
       return res.data.data
     }
   })
@@ -250,27 +250,32 @@ function MerchantCard({ merchant, onToggleStatus, onDelete, onEdit }) {
         </div>
 
         {/* Delivery Zones Indicator */}
-        {merchant.useLocationBasedOrdering && (
-          <div className="mt-3 p-2 bg-primary-50 rounded-lg">
+        {merchant.useLocationBasedOrdering && merchant.deliveryZones?.filter(z => z.isActive).length > 0 ? (
+          <div className="mt-3 p-2 bg-green-50 rounded-lg">
             <div className="flex items-center gap-2 text-sm">
-              <Target className="w-4 h-4 text-primary-500" />
-              <span className="text-primary-700 font-medium">
-                {merchant.deliveryZones?.filter(z => z.isActive).length || 0} active zone{merchant.deliveryZones?.filter(z => z.isActive).length !== 1 ? 's' : ''}
+              <Target className="w-4 h-4 text-green-500" />
+              <span className="text-green-700 font-medium">
+                {merchant.deliveryZones?.filter(z => z.isActive).length} active zone{merchant.deliveryZones?.filter(z => z.isActive).length !== 1 ? 's' : ''}
               </span>
-              {merchant.deliveryZones?.length > 0 && (
-                <span className="text-primary-500 text-xs">
+              {merchant.deliveryZones?.length > merchant.deliveryZones?.filter(z => z.isActive).length && (
+                <span className="text-green-500 text-xs">
                   ({merchant.deliveryZones.length} total)
                 </span>
               )}
             </div>
           </div>
-        )}
-
-        {!merchant.useLocationBasedOrdering && (
-          <div className="mt-3 p-2 bg-surface-50 rounded-lg">
-            <div className="flex items-center gap-2 text-sm text-surface-500">
+        ) : merchant.useLocationBasedOrdering ? (
+          <div className="mt-3 p-2 bg-amber-50 rounded-lg">
+            <div className="flex items-center gap-2 text-sm text-amber-700">
+              <Target className="w-4 h-4 text-amber-500" />
+              <span>Location enabled, no active zones</span>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-3 p-2 bg-red-50 rounded-lg">
+            <div className="flex items-center gap-2 text-sm text-red-600">
               <Circle className="w-4 h-4" />
-              <span>No delivery zones</span>
+              <span>No delivery zones - Not visible on app</span>
             </div>
           </div>
         )}

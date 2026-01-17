@@ -141,7 +141,7 @@ export default function MyShop() {
       toast.success('Product synced to catalog!')
     },
     onError: (error) => {
-      toast.error(error.response?.data?.error || 'Sync failed')
+      toast.error(error.response?.data?.error?.message || 'Sync failed')
     }
   })
 
@@ -754,7 +754,7 @@ function CategoryModal({ category, merchantId, onClose, onSuccess }) {
       }
       onSuccess()
     } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to save category')
+      toast.error(error.response?.data?.error?.message || 'Failed to save category')
     } finally {
       setIsSubmitting(false)
     }
@@ -869,7 +869,7 @@ function ProductModal({ product, merchantId, categories, onClose, onSuccess }) {
       }
     } catch (error) {
       console.error('Upload error:', error)
-      toast.error(error.response?.data?.error || 'Failed to upload image')
+      toast.error(error.response?.data?.error?.message || 'Failed to upload image')
     } finally {
       setIsUploading(false)
       setUploadProgress(0)
@@ -922,7 +922,7 @@ function ProductModal({ product, merchantId, categories, onClose, onSuccess }) {
       }
       onSuccess()
     } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to save product')
+      toast.error(error.response?.data?.error?.message || 'Failed to save product')
     } finally {
       setIsSubmitting(false)
     }
@@ -1177,7 +1177,7 @@ function EditShopModal({ merchant, onClose, onSuccess }) {
       toast.success('Shop updated successfully')
       onSuccess()
     } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to update shop')
+      toast.error(error.response?.data?.error?.message || 'Failed to update shop')
     } finally {
       setIsSubmitting(false)
     }

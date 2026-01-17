@@ -15,12 +15,13 @@ import GeoMap from './pages/GeoMap'
 import Customers from './pages/Customers'
 import Settings from './pages/Settings'
 import LiveChat from './pages/LiveChat'
+import HowItWorks from './pages/HowItWorks'
 
 function ProtectedRoute({ children }) {
-  const { isAuthenticated, isLoading, token, user } = useAuthStore()
+  const { isAuthenticated, isLoading, token, user, _hasHydrated } = useAuthStore()
   
-  // Show loading only if we're loading AND don't have stored credentials
-  if (isLoading && !token) {
+  // Show loading while hydrating or verifying auth
+  if (!_hasHydrated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-surface-50">
         <div className="flex flex-col items-center gap-4">
@@ -31,16 +32,13 @@ function ProtectedRoute({ children }) {
     )
   }
   
-  // If we have token and user from storage, allow access immediately
-  if (token && user) {
+  // After hydration, check if authenticated
+  if (isAuthenticated && user) {
     return children
   }
   
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />
-  }
-  
-  return children
+  // Not authenticated - redirect to login
+  return <Navigate to="/login" replace />
 }
 
 export default function App() {
@@ -65,6 +63,7 @@ export default function App() {
         <Route path="geo-map" element={<GeoMap />} />
         <Route path="customers" element={<Customers />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="how-it-works" element={<HowItWorks />} />
       </Route>     
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

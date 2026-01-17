@@ -75,7 +75,7 @@ function CatalogSetupPanel({ onSetupComplete }) {
       onSetupComplete?.();
     },
     onError: (error) => {
-      toast.error(error.response?.data?.error || 'Failed to configure catalog');
+      toast.error(error.response?.data?.error?.message || 'Failed to configure catalog');
     }
   });
 
@@ -398,7 +398,7 @@ function MerchantSyncStatus({ merchantId, merchantName }) {
       queryClient.invalidateQueries(['products']);
     },
     onError: (error) => {
-      toast.error(error.response?.data?.error || 'Sync failed');
+      toast.error(error.response?.data?.error?.message || 'Sync failed');
     }
   });
 
@@ -486,7 +486,7 @@ function AllMerchantsSyncPanel() {
   const { data: merchants } = useQuery({
     queryKey: ['merchants-for-sync'],
     queryFn: async () => {
-      const res = await api.get('/merchants?limit=100&mode=all');
+      const res = await api.get('/merchants?limit=100&mode=all&includeInactive=true');
       return res.data.data.merchants;
     }
   });
@@ -502,7 +502,7 @@ function AllMerchantsSyncPanel() {
       queryClient.invalidateQueries(['catalog-status']);
     },
     onError: (error) => {
-      toast.error(error.response?.data?.error || 'Sync failed');
+      toast.error(error.response?.data?.error?.message || 'Sync failed');
     }
   });
 

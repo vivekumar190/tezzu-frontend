@@ -546,7 +546,7 @@ function ProductModal({ merchantId, categories, product, onClose }) {
       }
     } catch (error) {
       console.error('Upload error:', error)
-      toast.error(error.response?.data?.error || 'Failed to upload image')
+      toast.error(error.response?.data?.error?.message || 'Failed to upload image')
     } finally {
       setIsUploading(false)
       setUploadProgress(0)
@@ -1233,7 +1233,7 @@ function DeliveryZonesDisplay({ merchant, merchantId, onZoneDeleted }) {
     const minLat = Math.min(...lats)
     const maxLat = Math.max(...lats)
     
-    // Approximate area calculation
+    // Calculate approximate radius and area
     const latDiff = maxLat - minLat
     const lngDiff = maxLng - minLng
     const avgLat = (maxLat + minLat) / 2
@@ -1241,7 +1241,12 @@ function DeliveryZonesDisplay({ merchant, merchantId, onZoneDeleted }) {
     // Convert to km (approximate)
     const latKm = latDiff * 111
     const lngKm = lngDiff * 111 * Math.cos(avgLat * Math.PI / 180)
-    const areaKm2 = Math.round(latKm * lngKm)
+    
+    // Calculate radius (average of lat/lng span divided by 2)
+    const radiusKm = (latKm + lngKm) / 4  // diameter / 2, averaged
+    
+    // Calculate circular area: π × r²
+    const areaKm2 = Math.round(Math.PI * radiusKm * radiusKm)
     
     // Center point
     const centerLat = (minLat + maxLat) / 2
@@ -1249,6 +1254,7 @@ function DeliveryZonesDisplay({ merchant, merchantId, onZoneDeleted }) {
     
     return {
       area: areaKm2,
+      radius: Math.round(radiusKm),
       center: { lat: centerLat, lng: centerLng },
       bounds: { minLat, maxLat, minLng, maxLng }
     }
@@ -1263,7 +1269,7 @@ function DeliveryZonesDisplay({ merchant, merchantId, onZoneDeleted }) {
       toast.success('Zone deleted successfully')
       onZoneDeleted?.()
     } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to delete zone')
+      toast.error(error.response?.data?.error?.message || 'Failed to delete zone')
     } finally {
       setDeletingZone(null)
     }
@@ -1275,7 +1281,7 @@ function DeliveryZonesDisplay({ merchant, merchantId, onZoneDeleted }) {
       toast.success(`Zone ${currentStatus ? 'deactivated' : 'activated'}`)
       onZoneDeleted?.() // Refresh merchant data
     } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to toggle zone')
+      toast.error(error.response?.data?.error?.message || 'Failed to toggle zone')
     }
   }
 
@@ -1344,9 +1350,15 @@ function DeliveryZonesDisplay({ merchant, merchantId, onZoneDeleted }) {
                       <span className="text-surface-600">Min ₹{zone.minimumOrder || 0}</span>
                     </div>
                     {coverage && (
-                      <div className="flex items-center gap-2">
-                        <Layers className="w-4 h-4 text-surface-400" />
-                        <span className="text-surface-600">~{coverage.area} km²</span>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1">
+                          <Target className="w-4 h-4 text-surface-400" />
+                          <span className="text-surface-600">~{coverage.radius} km radius</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Layers className="w-4 h-4 text-surface-400" />
+                          <span className="text-surface-600">~{coverage.area} km²</span>
+                        </div>
                       </div>
                     )}
                   </div>

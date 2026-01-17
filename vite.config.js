@@ -11,19 +11,33 @@ export default defineConfig({
         changeOrigin: true,
         configure: (proxy) => {
           proxy.on('error', (err) => {
-            console.log('API proxy error:', err.message);
+            // Suppress common proxy errors
+            if (!['ECONNRESET', 'EPIPE', 'ECONNREFUSED'].includes(err.code)) {
+              console.log('API proxy error:', err.message);
+            }
           });
         }
       },
       '/socket.io': {
         target: 'http://localhost:3001',
         ws: true,
-        configure: (proxy) => {
+        changeOrigin: true,
+        configure: (proxy, options) => {
+          // Suppress socket errors - these are normal when connections drop
           proxy.on('error', (err) => {
-            console.log('WebSocket proxy error:', err.message);
+            // Silent - these errors are expected during reconnects
+          });
+          proxy.on('proxyReqWs', (proxyReq, req, socket) => {
+            socket.on('error', () => {
+              // Silent - socket errors are normal
+            });
           });
         }
       }
+    },
+    // Suppress HMR errors in console
+    hmr: {
+      overlay: true,
     }
   }
 })
