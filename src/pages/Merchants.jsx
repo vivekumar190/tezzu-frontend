@@ -30,7 +30,7 @@ export default function Merchants() {
   const { data, isLoading } = useQuery({
     queryKey: ['merchants'],
     queryFn: async () => {
-      const res = await api.get('/merchants?limit=100')
+      const res = await api.get('/merchants?limit=100&mode=all')
       return res.data.data
     }
   })

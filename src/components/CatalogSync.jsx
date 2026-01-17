@@ -486,7 +486,7 @@ function AllMerchantsSyncPanel() {
   const { data: merchants } = useQuery({
     queryKey: ['merchants-for-sync'],
     queryFn: async () => {
-      const res = await api.get('/merchants?limit=100');
+      const res = await api.get('/merchants?limit=100&mode=all');
       return res.data.data.merchants;
     }
   });

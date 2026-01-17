@@ -259,7 +259,7 @@ function UserModal({ user, onClose }) {
   const { data: merchants } = useQuery({
     queryKey: ['merchants'],
     queryFn: async () => {
-      const res = await api.get('/merchants?limit=100')
+      const res = await api.get('/merchants?limit=100&mode=all')
       return res.data.data.merchants
     }
   })
