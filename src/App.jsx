@@ -17,9 +17,10 @@ import Settings from './pages/Settings'
 import LiveChat from './pages/LiveChat'
 
 function ProtectedRoute({ children }) {
-  const { isAuthenticated, isLoading } = useAuthStore()
+  const { isAuthenticated, isLoading, token, user } = useAuthStore()
   
-  if (isLoading) {
+  // Show loading only if we're loading AND don't have stored credentials
+  if (isLoading && !token) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-surface-50">
         <div className="flex flex-col items-center gap-4">
@@ -28,6 +29,11 @@ function ProtectedRoute({ children }) {
         </div>
       </div>
     )
+  }
+  
+  // If we have token and user from storage, allow access immediately
+  if (token && user) {
+    return children
   }
   
   if (!isAuthenticated) {

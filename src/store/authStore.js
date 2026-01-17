@@ -9,6 +9,7 @@ export const useAuthStore = create(
       token: null,
       isAuthenticated: false,
       isLoading: true,
+      _hasHydrated: false,
 
       login: async (email, password) => {
         const response = await api.post('/auth/login', { email, password })
@@ -43,21 +44,32 @@ export const useAuthStore = create(
       },
 
       checkAuth: async () => {
-        const { token } = get()
+        const { token, user } = get()
         
         if (!token) {
-          set({ isLoading: false })
+          set({ isLoading: false, _hasHydrated: true })
           return false
         }
 
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+
+        // If we already have user data from storage, use it immediately
+        // but still verify with the server in background
+        if (user && user.role) {
+          set({ 
+            isAuthenticated: true, 
+            isLoading: false,
+            _hasHydrated: true
+          })
+        }
 
         try {
           const response = await api.get('/auth/me')
           set({
             user: response.data.data.user,
             isAuthenticated: true,
-            isLoading: false
+            isLoading: false,
+            _hasHydrated: true
           })
           return true
         } catch (error) {
@@ -65,7 +77,8 @@ export const useAuthStore = create(
             user: null,
             token: null,
             isAuthenticated: false,
-            isLoading: false
+            isLoading: false,
+            _hasHydrated: true
           })
           delete api.defaults.headers.common['Authorization']
           return false
@@ -74,6 +87,10 @@ export const useAuthStore = create(
 
       updateUser: (userData) => {
         set({ user: { ...get().user, ...userData } })
+      },
+
+      setHasHydrated: (state) => {
+        set({ _hasHydrated: state })
       }
     }),
     {
@@ -84,7 +101,16 @@ export const useAuthStore = create(
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
+          // Immediately set loading false if we have user data
+          if (state.token && state.user) {
+            state.isAuthenticated = true
+            state.isLoading = false
+          }
+          // Then verify with server
           state.checkAuth()
+        } else {
+          // No stored state
+          useAuthStore.setState({ isLoading: false, _hasHydrated: true })
         }
       }
     }

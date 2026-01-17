@@ -42,6 +42,14 @@ const STATUS_COLORS = {
   follow_up: 'bg-orange-100 text-orange-700 border-orange-200',
 }
 
+// Helper to safely get city string (handles both string and object formats)
+const getCityString = (city) => {
+  if (!city) return null
+  if (typeof city === 'string') return city
+  if (typeof city === 'object' && city.city) return city.city
+  return null
+}
+
 export default function Leads() {
   const [statusFilter, setStatusFilter] = useState('')
   const [selectedLead, setSelectedLead] = useState(null)
@@ -290,7 +298,7 @@ function LeadDetails({ lead, onStatusChange }) {
         </div>
 
         {/* Business Info */}
-        {(lead.businessName || lead.businessType || lead.city) && (
+        {(lead.businessName || lead.businessType || getCityString(lead.city)) && (
           <div>
             <h4 className="text-sm font-medium text-surface-500 mb-3">Business Details</h4>
             <div className="space-y-3">
@@ -305,10 +313,10 @@ function LeadDetails({ lead, onStatusChange }) {
                   <span className="text-sm capitalize">{lead.businessType}</span>
                 </div>
               )}
-              {lead.city && (
+              {getCityString(lead.city) && (
                 <div className="flex items-center gap-3">
                   <MapPin className="w-4 h-4 text-surface-400" />
-                  <span>{lead.city}</span>
+                  <span>{getCityString(lead.city)}</span>
                 </div>
               )}
             </div>
