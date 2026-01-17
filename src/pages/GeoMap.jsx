@@ -335,7 +335,11 @@ export default function GeoMap() {
                         {merchant.acceptingOrders ? '● Open for Orders' : '● Currently Closed'}
                       </p>
                       {merchant.address && (
-                        <p className="text-sm text-gray-600 mt-2">{merchant.address}</p>
+                        <p className="text-sm text-gray-600 mt-2">
+                          {typeof merchant.address === 'string' 
+                            ? merchant.address 
+                            : merchant.address.street || merchant.address.city || 'Address on file'}
+                        </p>
                       )}
                       <div className="mt-2 pt-2 border-t">
                         <p className="text-xs text-gray-500">
@@ -634,7 +638,11 @@ function MerchantCard({ merchant, selected, onClick }) {
           </div>
           <div>
             <p className="font-medium text-surface-900 text-sm">{merchant.name}</p>
-            <p className="text-xs text-surface-400">{merchant.address?.city || 'No address'}</p>
+            <p className="text-xs text-surface-400">
+              {typeof merchant.address === 'string' 
+                ? merchant.address 
+                : (merchant.address?.city || merchant.address?.street || 'No address')}
+            </p>
           </div>
         </div>
         <span className={clsx(
