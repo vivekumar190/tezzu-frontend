@@ -49,11 +49,14 @@ export default function Layout() {
   const isAdmin = userRole === 'admin'
   const isMerchantAdmin = userRole === 'merchant_admin'
   
-  // Filter navigation items based on role
+  // Filter navigation items based on role - always return an array
   const filteredNavigation = useMemo(() => {
+    // Safety check - navigation should always be an array
+    if (!Array.isArray(navigation)) return []
+    
     // Wait for hydration and user data
     if (!_hasHydrated || !user) {
-      return navigation.filter(item => !item.adminOnly && !item.merchantOnly)
+      return navigation.filter(item => !item.adminOnly && !item.merchantOnly) || []
     }
     
     return navigation.filter(item => {
@@ -62,7 +65,7 @@ export default function Layout() {
       // Merchant-only pages  
       if (item.merchantOnly && !isMerchantAdmin) return false
       return true
-    })
+    }) || []
   }, [userRole, isAdmin, isMerchantAdmin, _hasHydrated, user])
 
   useEffect(() => {

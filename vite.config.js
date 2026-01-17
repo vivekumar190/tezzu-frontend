@@ -13,7 +13,7 @@ export default defineConfig({
           proxy.on('error', (err) => {
             // Suppress common proxy errors
             if (!['ECONNRESET', 'EPIPE', 'ECONNREFUSED'].includes(err.code)) {
-              console.log('API proxy error:', err.message);
+            console.log('API proxy error:', err.message);
             }
           });
         }

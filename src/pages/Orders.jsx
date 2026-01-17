@@ -186,14 +186,14 @@ export default function Orders() {
                 </div>
               </div>
             ))
-          ) : data?.orders?.length === 0 ? (
+          ) : !data?.orders || data?.orders?.length === 0 ? (
             <div className="card p-12 text-center">
               <ShoppingBag className="w-16 h-16 mx-auto mb-4 text-surface-300" />
               <h3 className="text-lg font-medium text-surface-900 mb-2">No orders found</h3>
               <p className="text-surface-500">Orders will appear here when customers place them</p>
             </div>
           ) : (
-            data?.orders?.map((order) => (
+            (Array.isArray(data.orders) ? data.orders : []).map((order) => (
               <OrderCard
                 key={order._id}
                 order={order}

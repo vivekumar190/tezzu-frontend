@@ -40,7 +40,7 @@ export function initSocket() {
   socket.on('disconnect', (reason) => {
     // Only log unexpected disconnections
     if (reason !== 'io client disconnect') {
-      console.log('Socket disconnected:', reason)
+    console.log('Socket disconnected:', reason)
     }
   })
 

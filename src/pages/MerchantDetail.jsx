@@ -1356,8 +1356,8 @@ function DeliveryZonesDisplay({ merchant, merchantId, onZoneDeleted }) {
                           <span className="text-surface-600">~{coverage.radius} km radius</span>
                         </div>
                         <div className="flex items-center gap-1">
-                          <Layers className="w-4 h-4 text-surface-400" />
-                          <span className="text-surface-600">~{coverage.area} km²</span>
+                        <Layers className="w-4 h-4 text-surface-400" />
+                        <span className="text-surface-600">~{coverage.area} km²</span>
                         </div>
                       </div>
                     )}

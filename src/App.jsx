@@ -38,7 +38,7 @@ function ProtectedRoute({ children }) {
   }
   
   // Not authenticated - redirect to login
-  return <Navigate to="/login" replace />
+    return <Navigate to="/login" replace />
 }
 
 export default function App() {
