@@ -36,12 +36,17 @@ export default function Dashboard() {
   const { user } = useAuthStore()
   const [liveOrders, setLiveOrders] = useState([])
 
-  const { data: dashboardData, isLoading } = useQuery({
+  const { data: dashboardData, isLoading, isError, refetch } = useQuery({
     queryKey: ['dashboard'],
     queryFn: async () => {
-      const res = await api.get('/admin/dashboard')
+      const res = await api.get('/admin/dashboard', {
+        headers: { 'Cache-Control': 'no-cache' }
+      })
       return res.data.data
-    }
+    },
+    staleTime: 0, // Always consider data stale
+    refetchOnWindowFocus: true,
+    retry: 2,
   })
 
   // Live activity - refresh every 30 seconds
@@ -161,6 +166,20 @@ export default function Dashboard() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (isError || !dashboardData) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4">
+        <p className="text-surface-500">Failed to load dashboard data</p>
+        <button 
+          onClick={() => refetch()}
+          className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+        >
+          Retry
+        </button>
       </div>
     )
   }
