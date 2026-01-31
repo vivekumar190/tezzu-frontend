@@ -11,7 +11,7 @@ import {
   Info,
   CheckCircle
 } from 'lucide-react'
-import api from '../lib/axios'
+import api from '../lib/api'
 import toast from 'react-hot-toast'
 
 const DAYS = [
