@@ -14,7 +14,11 @@ import {
   Filter,
   RefreshCw,
   ChevronDown,
-  ExternalLink
+  ExternalLink,
+  Video,
+  Send,
+  X,
+  Loader2
 } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -258,125 +262,248 @@ function LeadCard({ lead, isSelected, onClick, onStatusChange }) {
 }
 
 function LeadDetails({ lead, onStatusChange }) {
+  const [showMeetingModal, setShowMeetingModal] = useState(false)
+  const [meetingLink, setMeetingLink] = useState('')
+  const [isSending, setIsSending] = useState(false)
+  const queryClient = useQueryClient()
+
+  const handleSendMeetingInvite = async () => {
+    if (!meetingLink.trim()) {
+      toast.error('Please enter a Google Meet link')
+      return
+    }
+
+    setIsSending(true)
+    try {
+      await api.post(`/leads/${lead._id}/send-meeting-invite`, {
+        meetingLink: meetingLink.trim(),
+        meetingDate: lead.demoDate,
+        meetingTime: lead.demoTime,
+      })
+      toast.success('Meeting invite sent!')
+      setShowMeetingModal(false)
+      setMeetingLink('')
+      queryClient.invalidateQueries(['leads'])
+    } catch (error) {
+      // Error handled by interceptor
+    } finally {
+      setIsSending(false)
+    }
+  }
+
   return (
-    <div className="card sticky top-28 overflow-hidden">
-      <div className="p-6 border-b border-surface-100 bg-surface-50">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="font-semibold text-lg">{lead.name}</h3>
-          <span className={clsx(
-            'px-2 py-1 text-xs font-medium rounded-full border',
-            STATUS_COLORS[lead.status]
-          )}>
-            {lead.status.replace('_', ' ')}
-          </span>
-        </div>
-        <p className="text-sm text-surface-500">
-          {format(new Date(lead.createdAt), 'MMMM d, yyyy h:mm a')}
-        </p>
-      </div>
-
-      <div className="p-6 space-y-6">
-        {/* Contact Info */}
-        <div>
-          <h4 className="text-sm font-medium text-surface-500 mb-3">Contact Information</h4>
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <Phone className="w-4 h-4 text-surface-400" />
-              <span>{lead.phone}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <Mail className="w-4 h-4 text-surface-400" />
-              <span>{lead.email}</span>
-            </div>
-            {lead.whatsappNumber && lead.whatsappNumber !== lead.phone && (
-              <div className="flex items-center gap-3">
-                <MessageCircle className="w-4 h-4 text-surface-400" />
-                <span>{lead.whatsappNumber}</span>
-              </div>
-            )}
+    <>
+      <div className="card sticky top-28 overflow-hidden">
+        <div className="p-6 border-b border-surface-100 bg-surface-50">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-semibold text-lg">{lead.name}</h3>
+            <span className={clsx(
+              'px-2 py-1 text-xs font-medium rounded-full border',
+              STATUS_COLORS[lead.status]
+            )}>
+              {lead.status.replace('_', ' ')}
+            </span>
           </div>
+          <p className="text-sm text-surface-500">
+            {format(new Date(lead.createdAt), 'MMMM d, yyyy h:mm a')}
+          </p>
         </div>
 
-        {/* Business Info */}
-        {(lead.businessName || lead.businessType || getCityString(lead.city)) && (
+        <div className="p-6 space-y-6">
+          {/* Contact Info */}
           <div>
-            <h4 className="text-sm font-medium text-surface-500 mb-3">Business Details</h4>
+            <h4 className="text-sm font-medium text-surface-500 mb-3">Contact Information</h4>
             <div className="space-y-3">
-              {lead.businessName && (
+              <div className="flex items-center gap-3">
+                <Phone className="w-4 h-4 text-surface-400" />
+                <span>{lead.phone}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <Mail className="w-4 h-4 text-surface-400" />
+                <span>{lead.email}</span>
+              </div>
+              {lead.whatsappNumber && lead.whatsappNumber !== lead.phone && (
                 <div className="flex items-center gap-3">
-                  <Building2 className="w-4 h-4 text-surface-400" />
-                  <span>{lead.businessName}</span>
-                </div>
-              )}
-              {lead.businessType && (
-                <div className="flex items-center gap-3">
-                  <span className="text-sm capitalize">{lead.businessType}</span>
-                </div>
-              )}
-              {getCityString(lead.city) && (
-                <div className="flex items-center gap-3">
-                  <MapPin className="w-4 h-4 text-surface-400" />
-                  <span>{getCityString(lead.city)}</span>
+                  <MessageCircle className="w-4 h-4 text-surface-400" />
+                  <span>{lead.whatsappNumber}</span>
                 </div>
               )}
             </div>
           </div>
-        )}
 
-        {/* Demo Info */}
-        {lead.demoDate && (
+          {/* Business Info */}
+          {(lead.businessName || lead.businessType || getCityString(lead.city)) && (
+            <div>
+              <h4 className="text-sm font-medium text-surface-500 mb-3">Business Details</h4>
+              <div className="space-y-3">
+                {lead.businessName && (
+                  <div className="flex items-center gap-3">
+                    <Building2 className="w-4 h-4 text-surface-400" />
+                    <span>{lead.businessName}</span>
+                  </div>
+                )}
+                {lead.businessType && (
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm capitalize">{lead.businessType}</span>
+                  </div>
+                )}
+                {getCityString(lead.city) && (
+                  <div className="flex items-center gap-3">
+                    <MapPin className="w-4 h-4 text-surface-400" />
+                    <span>{getCityString(lead.city)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Demo Info */}
+          {lead.demoDate && (
+            <div>
+              <h4 className="text-sm font-medium text-surface-500 mb-3">Demo Scheduled</h4>
+              <div className="bg-purple-50 border border-purple-100 rounded-lg p-4">
+                <div className="flex items-center gap-2 text-purple-700">
+                  <Calendar className="w-5 h-5" />
+                  <span className="font-medium">
+                    {format(new Date(lead.demoDate), 'EEEE, MMMM d, yyyy')}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-purple-600 mt-1">
+                  <Clock className="w-4 h-4" />
+                  <span>{lead.demoTime}</span>
+                </div>
+                {lead.meetingInviteSent && (
+                  <div className="flex items-center gap-2 text-green-600 mt-2 pt-2 border-t border-purple-200">
+                    <CheckCircle className="w-4 h-4" />
+                    <span className="text-sm">Meeting invite sent</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Update Status */}
           <div>
-            <h4 className="text-sm font-medium text-surface-500 mb-3">Demo Scheduled</h4>
-            <div className="bg-purple-50 border border-purple-100 rounded-lg p-4">
-              <div className="flex items-center gap-2 text-purple-700">
-                <Calendar className="w-5 h-5" />
-                <span className="font-medium">
-                  {format(new Date(lead.demoDate), 'EEEE, MMMM d, yyyy')}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-purple-600 mt-1">
-                <Clock className="w-4 h-4" />
-                <span>{lead.demoTime}</span>
-              </div>
-            </div>
+            <h4 className="text-sm font-medium text-surface-500 mb-3">Update Status</h4>
+            <select
+              value={lead.status}
+              onChange={(e) => onStatusChange(lead._id, e.target.value)}
+              className="input w-full"
+            >
+              {STATUS_OPTIONS.filter(o => o.value).map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
           </div>
-        )}
 
-        {/* Update Status */}
-        <div>
-          <h4 className="text-sm font-medium text-surface-500 mb-3">Update Status</h4>
-          <select
-            value={lead.status}
-            onChange={(e) => onStatusChange(lead._id, e.target.value)}
-            className="input w-full"
-          >
-            {STATUS_OPTIONS.filter(o => o.value).map(opt => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-        </div>
+          {/* Send Meeting Link Button */}
+          {lead.demoDate && (
+            <button
+              onClick={() => setShowMeetingModal(true)}
+              className="btn btn-primary w-full"
+            >
+              <Video className="w-4 h-4" />
+              {lead.meetingInviteSent ? 'Resend Meeting Link' : 'Send Meeting Link'}
+            </button>
+          )}
 
-        {/* Quick Actions */}
-        <div className="flex gap-2">
-          <a 
-            href={`https://wa.me/${(lead.whatsappNumber || lead.phone).replace(/[^0-9]/g, '')}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn btn-primary flex-1"
-          >
-            <MessageCircle className="w-4 h-4" />
-            WhatsApp
-          </a>
-          <a 
-            href={`mailto:${lead.email}`}
-            className="btn btn-secondary flex-1"
-          >
-            <Mail className="w-4 h-4" />
-            Email
-          </a>
+          {/* Quick Actions */}
+          <div className="flex gap-2">
+            <a 
+              href={`https://wa.me/${(lead.whatsappNumber || lead.phone).replace(/[^0-9]/g, '')}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-secondary flex-1"
+            >
+              <MessageCircle className="w-4 h-4" />
+              WhatsApp
+            </a>
+            <a 
+              href={`mailto:${lead.email}`}
+              className="btn btn-secondary flex-1"
+            >
+              <Mail className="w-4 h-4" />
+              Email
+            </a>
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* Meeting Link Modal */}
+      {showMeetingModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-md shadow-2xl">
+            <div className="flex items-center justify-between p-6 border-b">
+              <h3 className="font-semibold text-lg">Send Meeting Link</h3>
+              <button
+                onClick={() => setShowMeetingModal(false)}
+                className="p-2 text-surface-400 hover:text-surface-600 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div>
+                <p className="text-sm text-surface-600 mb-4">
+                  Enter the Google Meet link to send to <strong>{lead.name}</strong> ({lead.email})
+                </p>
+                
+                {lead.demoDate && (
+                  <div className="bg-surface-50 rounded-lg p-3 mb-4 text-sm">
+                    <span className="text-surface-500">Scheduled: </span>
+                    <span className="font-medium">
+                      {format(new Date(lead.demoDate), 'MMM d, yyyy')} at {lead.demoTime}
+                    </span>
+                  </div>
+                )}
+
+                <label className="block text-sm font-medium text-surface-700 mb-2">
+                  Google Meet Link
+                </label>
+                <input
+                  type="url"
+                  value={meetingLink}
+                  onChange={(e) => setMeetingLink(e.target.value)}
+                  placeholder="https://meet.google.com/xxx-xxxx-xxx"
+                  className="input w-full"
+                  autoFocus
+                />
+                <p className="text-xs text-surface-400 mt-2">
+                  Create a meeting at <a href="https://meet.google.com" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline">meet.google.com</a> and paste the link here
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 p-6 border-t bg-surface-50">
+              <button
+                onClick={() => setShowMeetingModal(false)}
+                className="btn btn-secondary flex-1"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSendMeetingInvite}
+                disabled={isSending || !meetingLink.trim()}
+                className="btn btn-primary flex-1"
+              >
+                {isSending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    Send Invite
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 

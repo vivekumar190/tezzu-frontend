@@ -50,7 +50,7 @@ export default function Login() {
               <MessageCircle className="w-8 h-8 text-white" />
             </div>
             <div>
-              <h1 className="text-4xl font-display font-bold text-white">PowerMerchant</h1>
+              <h1 className="text-4xl font-display font-bold text-white">Tezzu</h1>
               <p className="text-white/80">WhatsApp Commerce Platform</p>
             </div>
           </div>
@@ -101,7 +101,7 @@ export default function Login() {
               <MessageCircle className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="font-display font-bold text-2xl gradient-text">PowerMerchant</h1>
+              <h1 className="font-display font-bold text-2xl gradient-text">Tezzu</h1>
               <p className="text-xs text-surface-400">WhatsApp Commerce</p>
             </div>
           </div>
@@ -121,7 +121,7 @@ export default function Login() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="input"
-                  placeholder="admin@powermerchant.com"
+                  placeholder="you@example.com"
                   autoComplete="email"
                 />
               </div>
@@ -164,11 +164,6 @@ export default function Login() {
               </button>
             </form>
 
-            <div className="mt-6 p-4 bg-surface-50 rounded-xl">
-              <p className="text-xs text-surface-500 mb-2">Demo credentials:</p>
-              <p className="text-sm text-surface-700 font-mono">admin@powermerchant.com</p>
-              <p className="text-sm text-surface-700 font-mono">admin123</p>
-            </div>
           </div>
         </div>
       </div>
