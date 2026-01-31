@@ -71,26 +71,36 @@ export default function Dashboard() {
   })
 
   useEffect(() => {
-    const socket = getSocket()
-    
-    if (socket) {
-      socket.on('order:created', (order) => {
-        setLiveOrders(prev => [order, ...prev].slice(0, 5))
-      })
+    try {
+      const socket = getSocket()
+      
+      if (socket) {
+        socket.on('order:created', (order) => {
+          if (order?._id) {
+            setLiveOrders(prev => [order, ...prev].slice(0, 5))
+          }
+        })
 
-      // Join merchant room if merchant admin
-      if (user?.merchant) {
-        const merchantId = typeof user.merchant === 'object' 
-          ? user.merchant._id 
-          : user.merchant
-        if (merchantId) {
-          joinMerchantRoom(merchantId)
+        // Join merchant room if merchant admin
+        if (user?.merchant) {
+          const merchantId = typeof user.merchant === 'object' 
+            ? user.merchant._id 
+            : user.merchant
+          if (merchantId) {
+            joinMerchantRoom(merchantId)
+          }
         }
       }
-    }
 
-    return () => {
-      socket?.off('order:created')
+      return () => {
+        try {
+          socket?.off('order:created')
+        } catch (e) {
+          // Ignore cleanup errors
+        }
+      }
+    } catch (e) {
+      console.error('Socket error in Dashboard:', e)
     }
   }, [user])
 

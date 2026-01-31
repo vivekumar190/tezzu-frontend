@@ -56,7 +56,7 @@ export default function Orders() {
   const [assignModalOrder, setAssignModalOrder] = useState(null)
   const queryClient = useQueryClient()
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['orders', statusFilter],
     queryFn: async () => {
       const params = new URLSearchParams()
@@ -65,28 +65,37 @@ export default function Orders() {
       const res = await api.get(`/orders?${params}`)
       return res.data.data
     },
-    refetchInterval: 30000 // Auto refresh every 30 seconds
+    refetchInterval: 30000, // Auto refresh every 30 seconds
+    retry: 2
   })
 
   // Real-time updates
   useEffect(() => {
-    const socket = getSocket()
-    if (socket) {
-      const handleOrderUpdate = () => {
-        queryClient.invalidateQueries(['orders'])
-      }
-      
-      socket.on('order:created', handleOrderUpdate)
-      socket.on('order:updated', handleOrderUpdate)
-      socket.on('order:accepted', handleOrderUpdate)
-      socket.on('order:rejected', handleOrderUpdate)
+    try {
+      const socket = getSocket()
+      if (socket) {
+        const handleOrderUpdate = () => {
+          queryClient.invalidateQueries(['orders'])
+        }
+        
+        socket.on('order:created', handleOrderUpdate)
+        socket.on('order:updated', handleOrderUpdate)
+        socket.on('order:accepted', handleOrderUpdate)
+        socket.on('order:rejected', handleOrderUpdate)
 
-      return () => {
-        socket.off('order:created', handleOrderUpdate)
-        socket.off('order:updated', handleOrderUpdate)
-        socket.off('order:accepted', handleOrderUpdate)
-        socket.off('order:rejected', handleOrderUpdate)
+        return () => {
+          try {
+            socket.off('order:created', handleOrderUpdate)
+            socket.off('order:updated', handleOrderUpdate)
+            socket.off('order:accepted', handleOrderUpdate)
+            socket.off('order:rejected', handleOrderUpdate)
+          } catch (e) {
+            // Ignore cleanup errors
+          }
+        }
       }
+    } catch (e) {
+      console.error('Socket error in Orders:', e)
     }
   }, [queryClient])
 
@@ -174,7 +183,17 @@ export default function Orders() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Orders Column */}
         <div className="lg:col-span-2 space-y-4">
-          {isLoading ? (
+          {error ? (
+            <div className="card p-12 text-center">
+              <XCircle className="w-16 h-16 mx-auto mb-4 text-red-300" />
+              <h3 className="text-lg font-medium text-surface-900 mb-2">Failed to load orders</h3>
+              <p className="text-surface-500 mb-4">Something went wrong while fetching orders</p>
+              <button onClick={() => refetch()} className="btn btn-primary">
+                <RefreshCw className="w-4 h-4" />
+                Try Again
+              </button>
+            </div>
+          ) : isLoading ? (
             [...Array(5)].map((_, i) => (
               <div key={i} className="card p-6 animate-pulse">
                 <div className="flex items-center gap-4 mb-4">

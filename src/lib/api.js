@@ -38,12 +38,22 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    const message = error.response?.data?.error?.message || 
-                    error.message || 
-                    'Something went wrong'
+    // Safely extract error message as a string
+    let message = 'Something went wrong'
     
-    // Don't show toast for auth check failures
-    if (error.config?.url !== '/auth/me') {
+    if (error.response?.data?.error?.message) {
+      const errorMsg = error.response.data.error.message
+      // Ensure message is a string
+      message = typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg)
+    } else if (typeof error.message === 'string') {
+      message = error.message
+    }
+    
+    // Don't show toast for auth check failures or network errors
+    const isAuthCheck = error.config?.url === '/auth/me'
+    const isNetworkError = !error.response
+    
+    if (!isAuthCheck && !isNetworkError) {
       toast.error(message)
     }
 

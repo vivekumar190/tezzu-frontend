@@ -71,21 +71,31 @@ export default function Layout() {
   }, [userRole, isAdmin, isMerchantAdmin, _hasHydrated, user])
 
   useEffect(() => {
-    const socket = initSocket()
-    
-    if (socket) {
-      socket.on('order:created', (order) => {
-        setNotifications(prev => [{
-          id: Date.now(),
-          type: 'order',
-          message: `New order #${order.orderNumber}`,
-          time: new Date()
-        }, ...prev].slice(0, 10))
-      })
+    try {
+      const socket = initSocket()
+      
+      if (socket) {
+        socket.on('order:created', (order) => {
+          if (order?.orderNumber) {
+            setNotifications(prev => [{
+              id: Date.now(),
+              type: 'order',
+              message: `New order #${order.orderNumber}`,
+              time: new Date()
+            }, ...prev].slice(0, 10))
+          }
+        })
+      }
+    } catch (err) {
+      console.error('Socket init error:', err)
     }
 
     return () => {
-      disconnectSocket()
+      try {
+        disconnectSocket()
+      } catch (err) {
+        // Ignore disconnect errors
+      }
     }
   }, [])
 
