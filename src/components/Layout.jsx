@@ -15,7 +15,8 @@ import {
   X,
   Bell,
   MessageCircle,
-  BookOpen
+  BookOpen,
+  CalendarClock
 } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { useMemo } from 'react'
@@ -32,6 +33,7 @@ const navigation = [
   { name: 'Staff', href: '/staff', icon: Users, merchantOnly: true },
   { name: 'Users', href: '/users', icon: Users, adminOnly: true },
   { name: 'Leads', href: '/leads', icon: UserPlus, adminOnly: true },
+  { name: 'Demo Settings', href: '/demo-settings', icon: CalendarClock, adminOnly: true },
   { name: 'Live Chat', href: '/live-chat', icon: MessageCircle, adminOnly: true },
   { name: 'Geo Map', href: '/geo-map', icon: MapPin, adminOnly: true },
   { name: 'Settings', href: '/settings', icon: Settings },

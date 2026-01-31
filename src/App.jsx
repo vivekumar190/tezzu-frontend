@@ -16,6 +16,7 @@ import Customers from './pages/Customers'
 import Settings from './pages/Settings'
 import LiveChat from './pages/LiveChat'
 import HowItWorks from './pages/HowItWorks'
+import DemoSettings from './pages/DemoSettings'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, isLoading, token, user, _hasHydrated } = useAuthStore()
@@ -64,6 +65,7 @@ export default function App() {
         <Route path="customers" element={<Customers />} />
         <Route path="settings" element={<Settings />} />
         <Route path="how-it-works" element={<HowItWorks />} />
+        <Route path="demo-settings" element={<DemoSettings />} />
       </Route>     
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

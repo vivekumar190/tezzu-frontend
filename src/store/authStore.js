@@ -86,20 +86,25 @@ export const useAuthStore = create(
   )
 )
 
-// Verify token in background (after initial render)
-if (initialState.token) {
-  api.get('/auth/me')
-    .then(res => {
-      useAuthStore.setState({ user: res.data.data.user })
-    })
-    .catch(() => {
-      console.log('[Auth] Token verification failed')
-      useAuthStore.setState({ 
-        user: null, 
-        token: null, 
-        isAuthenticated: false 
+// Verify token in background (once, after initial render)
+let hasVerified = false
+if (initialState.token && !hasVerified) {
+  hasVerified = true
+  // Delay verification to avoid immediate API call on every HMR reload
+  setTimeout(() => {
+    api.get('/auth/me')
+      .then(res => {
+        useAuthStore.setState({ user: res.data.data.user })
       })
-      delete api.defaults.headers.common['Authorization']
-    })
+      .catch(() => {
+        console.log('[Auth] Token verification failed')
+        useAuthStore.setState({ 
+          user: null, 
+          token: null, 
+          isAuthenticated: false 
+        })
+        delete api.defaults.headers.common['Authorization']
+      })
+  }, 1000)
 }
 
