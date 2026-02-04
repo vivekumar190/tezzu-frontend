@@ -423,44 +423,46 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Top Merchants */}
-        <div className="card">
-          <div className="flex items-center justify-between p-6 border-b border-surface-100">
-            <h3 className="font-semibold text-surface-900">Top Merchants</h3>
-            <Link to="/merchants" className="text-sm text-primary-600 hover:text-primary-700 font-medium">
-              View all →
-            </Link>
+        {/* Top Merchants - Admin Only */}
+        {user?.role === 'admin' && (
+          <div className="card">
+            <div className="flex items-center justify-between p-6 border-b border-surface-100">
+              <h3 className="font-semibold text-surface-900">Top Merchants</h3>
+              <Link to="/merchants" className="text-sm text-primary-600 hover:text-primary-700 font-medium">
+                View all →
+              </Link>
+            </div>
+            <div className="divide-y divide-surface-100">
+              {dashboardData?.topMerchants?.map((merchant, index) => (
+                <div key={merchant._id} className="flex items-center gap-4 p-4 hover:bg-surface-50 transition-colors">
+                  <div className={clsx(
+                    'w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white',
+                    index === 0 && 'bg-amber-500',
+                    index === 1 && 'bg-surface-400',
+                    index === 2 && 'bg-amber-700',
+                    index > 2 && 'bg-surface-200 text-surface-600'
+                  )}>
+                    {index + 1}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-surface-900">{merchant.name}</p>
+                    <p className="text-xs text-surface-500">{merchant.totalOrders} orders</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-amber-500">★</span>
+                    <span className="text-sm font-medium">{merchant.rating?.toFixed(1) || 'N/A'}</span>
+                  </div>
+                </div>
+              ))}
+              {(!dashboardData?.topMerchants || dashboardData.topMerchants.length === 0) && (
+                <div className="p-8 text-center text-surface-500">
+                  <Store className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p>No merchants yet</p>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="divide-y divide-surface-100">
-            {dashboardData?.topMerchants?.map((merchant, index) => (
-              <div key={merchant._id} className="flex items-center gap-4 p-4 hover:bg-surface-50 transition-colors">
-                <div className={clsx(
-                  'w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white',
-                  index === 0 && 'bg-amber-500',
-                  index === 1 && 'bg-surface-400',
-                  index === 2 && 'bg-amber-700',
-                  index > 2 && 'bg-surface-200 text-surface-600'
-                )}>
-                  {index + 1}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-surface-900">{merchant.name}</p>
-                  <p className="text-xs text-surface-500">{merchant.totalOrders} orders</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="text-amber-500">★</span>
-                  <span className="text-sm font-medium">{merchant.rating?.toFixed(1) || 'N/A'}</span>
-                </div>
-              </div>
-            ))}
-            {(!dashboardData?.topMerchants || dashboardData.topMerchants.length === 0) && (
-              <div className="p-8 text-center text-surface-500">
-                <Store className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>No merchants yet</p>
-              </div>
-            )}
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Live Orders Ticker */}

@@ -38,8 +38,8 @@ const navigation = [
   { name: 'Demo Settings', href: '/demo-settings', icon: CalendarClock, adminOnly: true },
   { name: 'Live Chat', href: '/live-chat', icon: MessageCircle, adminOnly: true },
   { name: 'Geo Map', href: '/geo-map', icon: MapPin, adminOnly: true },
-  { name: 'Settings', href: '/settings', icon: Settings },
-  { name: 'How It Works', href: '/how-it-works', icon: BookOpen },
+  { name: 'Settings', href: '/settings', icon: Settings, adminOnly: true },
+  { name: 'How It Works', href: '/how-it-works', icon: BookOpen, adminOnly: true },
 ]
 
 export default function Layout() {
