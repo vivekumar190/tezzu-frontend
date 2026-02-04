@@ -2,7 +2,9 @@ import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import Layout from './components/Layout'
+import StaffLayout from './components/StaffLayout'
 import Login from './pages/Login'
+import StaffLogin from './pages/StaffLogin'
 import Dashboard from './pages/Dashboard'
 import Merchants from './pages/Merchants'
 import MerchantDetail from './pages/MerchantDetail'
@@ -18,6 +20,9 @@ import Settings from './pages/Settings'
 import LiveChat from './pages/LiveChat'
 import HowItWorks from './pages/HowItWorks'
 import DemoSettings from './pages/DemoSettings'
+import StaffOrders from './pages/StaffOrders'
+import StaffProfile from './pages/StaffProfile'
+import OrderFlowBuilder from './pages/OrderFlowBuilder'
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
@@ -61,7 +66,7 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-function ProtectedRoute({ children }) {
+function ProtectedRoute({ children, staffOnly = false }) {
   const { isAuthenticated, isLoading, token, user, _hasHydrated } = useAuthStore()
   
   // Show loading while hydrating or verifying auth
@@ -78,18 +83,44 @@ function ProtectedRoute({ children }) {
   
   // After hydration, check if authenticated
   if (isAuthenticated && user) {
+    // Staff-only routes check
+    if (staffOnly && user.role !== 'staff') {
+      return <Navigate to="/" replace />
+    }
+    // Admin/merchant routes - redirect staff to staff portal
+    if (!staffOnly && user.role === 'staff') {
+      return <Navigate to="/staff/orders" replace />
+    }
     return children
   }
   
-  // Not authenticated - redirect to login
-    return <Navigate to="/login" replace />
+  // Not authenticated - redirect to appropriate login
+  if (staffOnly) {
+    return <Navigate to="/staff/login" replace />
+  }
+  return <Navigate to="/login" replace />
 }
 
 export default function App() {
   return (
     <ErrorBoundary>
       <Routes>
+        {/* Admin/Merchant Login */}
         <Route path="/login" element={<Login />} />
+        
+        {/* Staff Portal Routes */}
+        <Route path="/staff/login" element={<StaffLogin />} />
+        <Route path="/staff" element={
+          <ProtectedRoute staffOnly>
+            <StaffLayout />
+          </ProtectedRoute>
+        }>
+          <Route index element={<Navigate to="/staff/orders" replace />} />
+          <Route path="orders" element={<StaffOrders />} />
+          <Route path="profile" element={<StaffProfile />} />
+        </Route>
+        
+        {/* Admin/Merchant Dashboard Routes */}
         <Route path="/" element={
           <ProtectedRoute>
             <Layout />
@@ -101,7 +132,8 @@ export default function App() {
           <Route path="my-shop" element={<MyShop />} />
           <Route path="orders" element={<Orders />} />
           <Route path="products" element={<Products />} />
-          <Route path="staff" element={<Staff />} />
+          <Route path="staff-management" element={<Staff />} />
+          <Route path="order-flow" element={<OrderFlowBuilder />} />
           <Route path="users" element={<Users />} />
           <Route path="leads" element={<Leads />} />
           <Route path="live-chat" element={<LiveChat />} />

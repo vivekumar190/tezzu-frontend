@@ -15,10 +15,12 @@ import {
   Trash2,
   ToggleLeft,
   ToggleRight,
-  X
+  X,
+  AlertCircle
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
+import { useAuthStore } from '../store/authStore'
 import clsx from 'clsx'
 
 const ROLE_CONFIG = {
@@ -35,15 +37,17 @@ export default function Staff() {
   const [showModal, setShowModal] = useState(false)
   const [editingStaff, setEditingStaff] = useState(null)
   const queryClient = useQueryClient()
+  const { user } = useAuthStore()
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['staff', roleFilter],
     queryFn: async () => {
       const params = new URLSearchParams()
       if (roleFilter) params.append('role', roleFilter)
       const res = await api.get(`/staff?${params}`)
       return res.data.data
-    }
+    },
+    retry: 1
   })
 
   const deleteMutation = useMutation({
@@ -87,6 +91,47 @@ export default function Staff() {
     if (confirm(`Are you sure you want to delete ${member.name}?`)) {
       deleteMutation.mutate(member._id)
     }
+  }
+
+  // Show error state
+  if (isError) {
+    const errorMessage = error?.response?.data?.error?.message || error?.message || 'Failed to load staff'
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-display font-bold text-surface-900">Staff Management</h1>
+            <p className="text-surface-500">Manage your restaurant staff</p>
+          </div>
+        </div>
+        <div className="card p-8 text-center">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-surface-900 mb-2">Unable to Load Staff</h3>
+          <p className="text-surface-500 mb-4">{errorMessage}</p>
+          <button onClick={() => refetch()} className="btn btn-primary">
+            Try Again
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-display font-bold text-surface-900">Staff Management</h1>
+            <p className="text-surface-500">Manage your restaurant staff</p>
+          </div>
+        </div>
+        <div className="card p-8 text-center">
+          <div className="animate-spin w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full mx-auto mb-4" />
+          <p className="text-surface-500">Loading staff...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -149,13 +194,25 @@ export default function Staff() {
         </div>
       </div>
 
+      {/* Error State */}
+      {isError && (
+        <div className="card p-12 text-center">
+          <AlertCircle className="w-16 h-16 mx-auto mb-4 text-red-400" />
+          <h3 className="text-lg font-medium text-surface-900 mb-2">Failed to load staff</h3>
+          <p className="text-surface-500 mb-4">{error?.response?.data?.error?.message || error?.message || 'An error occurred'}</p>
+          <button onClick={() => refetch()} className="btn btn-primary">
+            Try Again
+          </button>
+        </div>
+      )}
+
       {/* Staff List */}
       {isLoading ? (
         <div className="card p-12 text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto" />
           <p className="mt-4 text-surface-500">Loading staff...</p>
         </div>
-      ) : filteredStaff.length === 0 ? (
+      ) : !isError && filteredStaff.length === 0 ? (
         <div className="card p-12 text-center">
           <Users className="w-16 h-16 mx-auto mb-4 text-surface-300" />
           <h3 className="text-lg font-medium text-surface-900 mb-2">No staff members</h3>

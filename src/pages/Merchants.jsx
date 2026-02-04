@@ -15,7 +15,14 @@ import {
   Edit,
   ExternalLink,
   Target,
-  Circle
+  Circle,
+  MessageCircle,
+  CheckCircle,
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  Key,
+  Shield
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
@@ -280,6 +287,21 @@ function MerchantCard({ merchant, onToggleStatus, onDelete, onEdit }) {
           </div>
         )}
 
+        {/* Standalone Indicator */}
+        {merchant.isStandalone && (
+          <div className="mt-3 p-2 bg-primary-50 rounded-lg">
+            <div className="flex items-center gap-2 text-sm">
+              <MessageCircle className="w-4 h-4 text-primary-500" />
+              <span className="text-primary-700 font-medium">Standalone Merchant</span>
+              {merchant.whatsappConfig?.isVerified ? (
+                <CheckCircle className="w-4 h-4 text-green-500 ml-auto" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-amber-500 ml-auto" />
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Stats */}
         <div className="flex items-center gap-4 mt-4 pt-4 border-t border-surface-100">
           <div className="flex items-center gap-1">
@@ -309,9 +331,18 @@ function MerchantModal({ merchant, onClose }) {
     email: merchant?.email || '',
     city: merchant?.address?.city || '',
     minimumOrderAmount: merchant?.minimumOrderAmount || 0,
-    deliveryCharges: merchant?.deliveryCharges || 0
+    deliveryCharges: merchant?.deliveryCharges || 0,
+    // Standalone merchant fields
+    isStandalone: merchant?.isStandalone || false,
+    whatsappConfig: {
+      phoneNumberId: merchant?.whatsappConfig?.phoneNumberId || '',
+      accessToken: merchant?.whatsappConfig?.accessToken || '',
+      verifyToken: merchant?.whatsappConfig?.verifyToken || '',
+      businessAccountId: merchant?.whatsappConfig?.businessAccountId || ''
+    }
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showStandaloneConfig, setShowStandaloneConfig] = useState(merchant?.isStandalone || false)
   const queryClient = useQueryClient()
 
   const handleSubmit = async (e) => {
@@ -321,7 +352,9 @@ function MerchantModal({ merchant, onClose }) {
     try {
       const payload = {
         ...formData,
-        address: { city: formData.city }
+        address: { city: formData.city },
+        // Only include whatsappConfig if standalone is enabled
+        whatsappConfig: formData.isStandalone ? formData.whatsappConfig : undefined
       }
 
       if (merchant) {
@@ -341,16 +374,22 @@ function MerchantModal({ merchant, onClose }) {
     }
   }
 
+  const handleStandaloneToggle = (enabled) => {
+    setFormData({ ...formData, isStandalone: enabled })
+    setShowStandaloneConfig(enabled)
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in">
-      <div className="card w-full max-w-lg max-h-[90vh] overflow-y-auto">
+      <div className="card w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="p-6 border-b border-surface-100">
           <h2 className="text-xl font-semibold">
             {merchant ? 'Edit Merchant' : 'Add New Merchant'}
           </h2>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {/* Basic Info */}
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
               <label className="label">Business Name *</label>
@@ -385,6 +424,7 @@ function MerchantModal({ merchant, onClose }) {
                 placeholder="+91..."
                 required
               />
+              <p className="text-xs text-surface-400 mt-1">For receiving order notifications</p>
             </div>
 
             <div className="col-span-2">
@@ -440,7 +480,126 @@ function MerchantModal({ merchant, onClose }) {
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4">
+          {/* Standalone Merchant Section */}
+          <div className="border-t border-surface-200 pt-6">
+            <div 
+              className={clsx(
+                'p-4 rounded-xl border-2 cursor-pointer transition-all',
+                formData.isStandalone 
+                  ? 'border-primary-500 bg-primary-50' 
+                  : 'border-surface-200 hover:border-surface-300'
+              )}
+              onClick={() => handleStandaloneToggle(!formData.isStandalone)}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={clsx(
+                    'w-10 h-10 rounded-lg flex items-center justify-center',
+                    formData.isStandalone ? 'bg-primary-500 text-white' : 'bg-surface-100 text-surface-500'
+                  )}>
+                    <MessageCircle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-surface-900">Tezzu Standalone Merchant</h4>
+                    <p className="text-sm text-surface-500">
+                      Use merchant's own WhatsApp Business number instead of Tezzu's
+                    </p>
+                  </div>
+                </div>
+                <div className={clsx(
+                  'w-12 h-6 rounded-full transition-all relative',
+                  formData.isStandalone ? 'bg-primary-500' : 'bg-surface-300'
+                )}>
+                  <div className={clsx(
+                    'absolute top-1 w-4 h-4 rounded-full bg-white transition-all',
+                    formData.isStandalone ? 'left-7' : 'left-1'
+                  )} />
+                </div>
+              </div>
+            </div>
+
+            {/* Standalone Config (collapsible) */}
+            {formData.isStandalone && (
+              <div className="mt-4 space-y-4 animate-fade-in">
+                <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-amber-800">
+                      <p className="font-medium mb-1">WhatsApp Business API Required</p>
+                      <p>
+                        The merchant needs their own WhatsApp Business API credentials from Meta. 
+                        Customers will message the merchant's WhatsApp number directly.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className="label flex items-center gap-2">
+                      <Key className="w-4 h-4 text-surface-400" />
+                      Phone Number ID *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.whatsappConfig.phoneNumberId}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        whatsappConfig: { ...formData.whatsappConfig, phoneNumberId: e.target.value }
+                      })}
+                      className="input font-mono text-lg"
+                      placeholder="e.g. 123456789012345"
+                      required={formData.isStandalone}
+                    />
+                    <p className="text-xs text-surface-400 mt-1">
+                      Meta Business Suite → WhatsApp → Phone Numbers → Click number → Phone Number ID
+                    </p>
+                  </div>
+                </div>
+
+                {/* Quick Setup Info */}
+                <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                  <p className="text-sm text-green-800 font-medium mb-2 flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4" />
+                    Simple 2-Step Setup
+                  </p>
+                  <ol className="text-xs text-green-700 space-y-1 ml-6 list-decimal">
+                    <li>Add merchant's phone to your Business Account in Meta Business Suite</li>
+                    <li>Enter the Phone Number ID above</li>
+                  </ol>
+                  <p className="text-xs text-green-600 mt-2">
+                    ✨ Webhook and Access Token are automatically handled by Tezzu!
+                  </p>
+                </div>
+
+                {/* Verification Status */}
+                {merchant?.whatsappConfig?.isVerified !== undefined && (
+                  <div className={clsx(
+                    'p-3 rounded-lg flex items-center gap-2',
+                    merchant.whatsappConfig.isVerified 
+                      ? 'bg-green-50 text-green-700' 
+                      : 'bg-amber-50 text-amber-700'
+                  )}>
+                    {merchant.whatsappConfig.isVerified ? (
+                      <>
+                        <CheckCircle className="w-5 h-5" />
+                        <span>WhatsApp connected and active</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="w-5 h-5" />
+                        <span>
+                          Not verified yet - save and verify from Merchant Details page
+                        </span>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-surface-200">
             <button type="button" onClick={onClose} className="btn btn-secondary">
               Cancel
             </button>

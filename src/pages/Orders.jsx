@@ -28,23 +28,27 @@ import clsx from 'clsx'
 const STATUS_OPTIONS = [
   { value: '', label: 'All Status' },
   { value: 'pending', label: 'Pending' },
+  { value: 'payment_pending', label: '💳 Payment Pending' },
   { value: 'accepted', label: 'Accepted' },
   { value: 'preparing', label: 'Preparing' },
   { value: 'ready', label: 'Ready' },
   { value: 'out_for_delivery', label: 'Out for Delivery' },
   { value: 'delivered', label: 'Delivered' },
+  { value: 'undelivered', label: 'Undelivered' },
   { value: 'rejected', label: 'Rejected' },
   { value: 'cancelled', label: 'Cancelled' }
 ]
 
 const STATUS_COLORS = {
   pending: 'badge-warning',
+  payment_pending: 'bg-yellow-100 text-yellow-700',
   confirmed: 'badge-info',
   accepted: 'badge-info',
   preparing: 'badge-info',
   ready: 'badge-success',
   out_for_delivery: 'badge-info',
   delivered: 'badge-success',
+  undelivered: 'badge-error',
   rejected: 'badge-error',
   cancelled: 'badge-error'
 }
@@ -55,6 +59,37 @@ export default function Orders() {
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '')
   const [assignModalOrder, setAssignModalOrder] = useState(null)
   const queryClient = useQueryClient()
+
+  // Fetch order flow configuration
+  const { data: orderFlowData } = useQuery({
+    queryKey: ['order-flow'],
+    queryFn: async () => {
+      const res = await api.get('/merchants/me/order-flow')
+      return res.data.data
+    },
+    staleTime: 60000
+  })
+
+  const orderFlow = orderFlowData?.flow || orderFlowData?.orderFlow || []
+
+  // Build nextStatuses map from flow configuration
+  const getNextStatuses = (status) => {
+    const stepConfig = orderFlow.find(s => s.status === status)
+    if (stepConfig?.nextStatuses && stepConfig.nextStatuses.length > 0) {
+      return stepConfig.nextStatuses
+    }
+    // Fallback to default linear flow
+    const defaultNext = {
+      pending: ['payment_pending', 'accepted'],
+      payment_pending: ['accepted'],
+      accepted: ['preparing'],
+      preparing: ['ready'],
+      ready: ['out_for_delivery'],
+      out_for_delivery: ['delivered', 'undelivered'],
+      undelivered: ['out_for_delivery']
+    }
+    return defaultNext[status] || []
+  }
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['orders', statusFilter],
@@ -107,6 +142,14 @@ export default function Orders() {
     }
   })
 
+  const verifyPaymentMutation = useMutation({
+    mutationFn: (orderId) => api.post(`/orders/${orderId}/payment-proof`, { isVerified: true }),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['orders'])
+      toast.success('Payment verified!')
+    }
+  })
+
   const acceptOrderMutation = useMutation({
     mutationFn: (orderId) => api.post(`/orders/${orderId}/accept`),
     onSuccess: () => {
@@ -114,6 +157,20 @@ export default function Orders() {
       toast.success('Order accepted')
     }
   })
+  
+  // Handle status update with special cases
+  const handleStatusUpdate = (orderId, status) => {
+    if (status === 'verify_payment') {
+      // First verify payment, then accept order
+      verifyPaymentMutation.mutate(orderId, {
+        onSuccess: () => {
+          acceptOrderMutation.mutate(orderId)
+        }
+      })
+    } else {
+      updateStatusMutation.mutate({ orderId, status })
+    }
+  }
 
   const rejectOrderMutation = useMutation({
     mutationFn: ({ orderId, reason }) => api.post(`/orders/${orderId}/reject`, { reason }),
@@ -220,8 +277,9 @@ export default function Orders() {
                 onClick={() => setSelectedOrder(order)}
                 onAccept={() => acceptOrderMutation.mutate(order._id)}
                 onReject={(reason) => rejectOrderMutation.mutate({ orderId: order._id, reason })}
-                onUpdateStatus={(status) => updateStatusMutation.mutate({ orderId: order._id, status })}
+                onUpdateStatus={(status) => handleStatusUpdate(order._id, status)}
                 onAssignDelivery={() => setAssignModalOrder(order)}
+                getNextStatuses={getNextStatuses}
               />
             ))
           )}
@@ -232,7 +290,7 @@ export default function Orders() {
           {selectedOrder ? (
             <OrderDetails 
               order={selectedOrder} 
-              onUpdateStatus={(status) => updateStatusMutation.mutate({ orderId: selectedOrder._id, status })}
+              onUpdateStatus={(status) => handleStatusUpdate(selectedOrder._id, status)}
               onAssignDelivery={() => setAssignModalOrder(selectedOrder)}
             />
           ) : (
@@ -260,7 +318,7 @@ export default function Orders() {
   )
 }
 
-function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateStatus, onAssignDelivery }) {
+function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateStatus, onAssignDelivery, getNextStatuses }) {
   const getStatusIcon = (status) => {
     switch (status) {
       case 'pending': return <Clock className="w-4 h-4" />
@@ -269,17 +327,25 @@ function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateSta
       case 'ready': return <CheckCircle className="w-4 h-4" />
       case 'out_for_delivery': return <Truck className="w-4 h-4" />
       case 'delivered': return <CheckCircle className="w-4 h-4" />
+      case 'undelivered': return <XCircle className="w-4 h-4" />
       case 'rejected':
       case 'cancelled': return <XCircle className="w-4 h-4" />
       default: return <Clock className="w-4 h-4" />
     }
   }
 
-  const nextStatus = {
-    accepted: 'preparing',
-    preparing: 'ready',
-    ready: 'out_for_delivery',
-    out_for_delivery: 'delivered'
+  // Get next status options from flow config
+  const nextStatuses = getNextStatuses ? getNextStatuses(order.status) : []
+
+  // Status labels for buttons
+  const statusLabels = {
+    payment_pending: '💳 Request Payment',
+    accepted: '✅ Accept',
+    preparing: '👨‍🍳 Preparing',
+    ready: '🍽️ Ready',
+    out_for_delivery: '🚴 Out for Delivery',
+    delivered: '✓ Delivered',
+    undelivered: '❌ Undelivered'
   }
 
   // Show assign delivery button for ready orders without delivery boy
@@ -336,12 +402,20 @@ function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateSta
       {/* Quick Actions */}
       {order.status === 'pending' && (
         <div className="flex gap-2 pt-3 border-t border-surface-100" onClick={e => e.stopPropagation()}>
+          {/* Show "Request Payment" first if payment flow is configured */}
+          <button 
+            onClick={() => onUpdateStatus('payment_pending')}
+            className="btn btn-warning btn-sm flex-1"
+          >
+            💳 Request Payment
+          </button>
           <button 
             onClick={() => onAccept()}
             className="btn btn-primary btn-sm flex-1"
+            title="Skip payment and accept directly"
           >
             <CheckCircle className="w-4 h-4" />
-            Accept
+            Accept (COD)
           </button>
           <button 
             onClick={() => {
@@ -368,14 +442,70 @@ function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateSta
               Assign Rider
             </button>
           )}
-          {nextStatus[order.status] && (
+          {nextStatuses.length > 0 && nextStatuses.map(status => (
             <button 
-              onClick={() => onUpdateStatus(nextStatus[order.status])}
+              key={status}
+              onClick={() => onUpdateStatus(status)}
               className="btn btn-secondary btn-sm flex-1"
             >
-              Mark {nextStatus[order.status].replace('_', ' ')}
+              {statusLabels[status] || `Mark ${status.replace('_', ' ')}`}
             </button>
+          ))}
+        </div>
+      )}
+
+      {/* Out for Delivery - Show delivered/undelivered options */}
+      {order.status === 'out_for_delivery' && (
+        <div className="flex gap-2 pt-3 border-t border-surface-100" onClick={e => e.stopPropagation()}>
+          <button 
+            onClick={() => onUpdateStatus('delivered')}
+            className="btn btn-success btn-sm flex-1"
+          >
+            ✓ Delivered
+          </button>
+          <button 
+            onClick={() => onUpdateStatus('undelivered')}
+            className="btn btn-error btn-sm flex-1"
+          >
+            ❌ Undelivered
+          </button>
+        </div>
+      )}
+
+      {/* Undelivered - Show retry option */}
+      {order.status === 'undelivered' && (
+        <div className="flex gap-2 pt-3 border-t border-surface-100" onClick={e => e.stopPropagation()}>
+          <button 
+            onClick={() => onUpdateStatus('out_for_delivery')}
+            className="btn btn-warning btn-sm flex-1"
+          >
+            🔄 Retry Delivery
+          </button>
+        </div>
+      )}
+
+      {/* Payment Pending - Show accept after payment verified */}
+      {order.status === 'payment_pending' && (
+        <div className="pt-3 border-t border-surface-100 space-y-2" onClick={e => e.stopPropagation()}>
+          {order.paymentProof?.imageUrl ? (
+            <button 
+              onClick={() => onUpdateStatus('verify_payment')}
+              className="btn btn-success btn-sm w-full"
+            >
+              <CheckCircle className="w-4 h-4" />
+              Verify Payment & Accept
+            </button>
+          ) : (
+            <div className="text-center text-sm text-yellow-600 py-2">
+              ⏳ Waiting for payment screenshot...
+            </div>
           )}
+          <button 
+            onClick={() => onAccept()}
+            className="btn btn-secondary btn-sm w-full"
+          >
+            Accept Without Payment
+          </button>
         </div>
       )}
 
@@ -398,8 +528,8 @@ function OrderDetails({ order, onUpdateStatus, onAssignDelivery }) {
   const canAssignDelivery = ['accepted', 'preparing', 'ready'].includes(order.status)
 
   return (
-    <div className="card sticky top-28 overflow-hidden">
-      <div className="p-6 border-b border-surface-100 bg-surface-50">
+    <div className="card sticky top-28 max-h-[calc(100vh-8rem)] flex flex-col overflow-hidden">
+      <div className="p-6 border-b border-surface-100 bg-surface-50 flex-shrink-0">
         <div className="flex items-center justify-between mb-2">
           <h3 className="font-semibold text-lg">Order #{order.orderNumber}</h3>
           <span className={clsx('badge', STATUS_COLORS[order.status])}>
@@ -411,7 +541,7 @@ function OrderDetails({ order, onUpdateStatus, onAssignDelivery }) {
         </p>
       </div>
 
-      <div className="p-6 space-y-6">
+      <div className="p-6 space-y-6 overflow-y-auto flex-1">
         {/* Scheduled Delivery */}
         {order.scheduledFor && (
           <div className="p-3 bg-purple-50 rounded-xl">
@@ -422,6 +552,84 @@ function OrderDetails({ order, onUpdateStatus, onAssignDelivery }) {
             <p className="mt-1 text-purple-800 font-semibold">
               {format(new Date(order.scheduledFor), 'EEEE, MMM d • h:mm a')}
             </p>
+          </div>
+        )}
+
+        {/* Payment Status & Screenshot */}
+        {(order.status === 'payment_pending' || order.paymentProof?.imageUrl) && (
+          <div className={clsx(
+            "p-4 rounded-xl border-2",
+            order.paymentProof?.isVerified 
+              ? "bg-green-50 border-green-200" 
+              : "bg-yellow-50 border-yellow-200"
+          )}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">💳</span>
+                <span className="font-medium text-surface-900">Payment Proof</span>
+              </div>
+              {order.paymentProof?.isVerified ? (
+                <span className="badge bg-green-100 text-green-700">
+                  <CheckCircle className="w-3 h-3 mr-1" />
+                  Verified
+                </span>
+              ) : (
+                <span className="badge bg-yellow-100 text-yellow-700">
+                  Pending Verification
+                </span>
+              )}
+            </div>
+            
+            {order.paymentProof?.imageUrl ? (
+              <div className="space-y-3">
+                <a 
+                  href={order.paymentProof.imageUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="block"
+                >
+                  <img 
+                    src={order.paymentProof.imageUrl} 
+                    alt="Payment Screenshot" 
+                    className="w-full max-h-64 object-contain rounded-lg border border-surface-200 cursor-pointer hover:opacity-90 transition-opacity"
+                  />
+                </a>
+                <div className="text-xs text-surface-500">
+                  {order.paymentProof.uploadedAt && (
+                    <p>Uploaded: {format(new Date(order.paymentProof.uploadedAt), 'MMM d, h:mm a')}</p>
+                  )}
+                  {order.paymentProof.verifiedBy && (
+                    <p>Verified by: {order.paymentProof.verifiedBy}</p>
+                  )}
+                </div>
+                
+                {!order.paymentProof.isVerified && (
+                  <button
+                    onClick={() => onUpdateStatus('verify_payment')}
+                    className="w-full btn btn-primary btn-sm"
+                  >
+                    <CheckCircle className="w-4 h-4 mr-1" />
+                    Verify Payment & Accept Order
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                <p className="text-surface-500 text-sm">Waiting for customer to send payment screenshot...</p>
+                <p className="text-xs text-surface-400 mt-1">Customer will reply with screenshot via WhatsApp</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Undelivered Reason */}
+        {order.status === 'undelivered' && order.undeliveredReason && (
+          <div className="p-3 bg-red-50 rounded-xl border border-red-200">
+            <div className="flex items-center gap-2 text-red-700 mb-2">
+              <XCircle className="w-4 h-4" />
+              <span className="text-sm font-medium">Delivery Failed</span>
+            </div>
+            <p className="text-red-800 text-sm">{order.undeliveredReason}</p>
           </div>
         )}
 

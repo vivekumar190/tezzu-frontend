@@ -12,12 +12,12 @@ const api = axios.create({
   }
 })
 
-// Request interceptor - always get fresh token from localStorage
+// Request interceptor - always get fresh token from sessionStorage
 api.interceptors.request.use(
   (config) => {
-    // Get token from localStorage on every request
+    // Get token from sessionStorage on every request (tab-isolated)
     try {
-      const authData = localStorage.getItem('powermerchant-auth')
+      const authData = sessionStorage.getItem('powermerchant-auth')
       if (authData) {
         const { state } = JSON.parse(authData)
         if (state?.token) {
@@ -59,9 +59,12 @@ api.interceptors.response.use(
 
     // Handle 401 - Unauthorized
     if (error.response?.status === 401) {
-      // Only redirect if not on login page
-      if (!window.location.pathname.includes('/login')) {
-        localStorage.removeItem('powermerchant-auth')
+      // Don't clear auth for /auth/me - let the auth store handle it
+      const isAuthCheck = error.config?.url === '/auth/me'
+      
+      // Only redirect if not on login page and not an auth check
+      if (!window.location.pathname.includes('/login') && !isAuthCheck) {
+        sessionStorage.removeItem('powermerchant-auth')
         window.location.href = '/login'
       }
     }

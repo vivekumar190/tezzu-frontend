@@ -686,6 +686,9 @@ export default function MyShop() {
               </button>
             </div>
           </div>
+
+          {/* Payment Settings */}
+          <PaymentSettings merchant={merchant} merchantId={merchantId} />
         </div>
       )}
 
@@ -1867,3 +1870,180 @@ function MerchantLocationSettings({ merchant, merchantId, onUpdate }) {
   )
 }
 
+// Payment Settings Component
+function PaymentSettings({ merchant, merchantId }) {
+  const [upiId, setUpiId] = useState(merchant?.upiId || '')
+  const [qrCodeUrl, setQrCodeUrl] = useState(merchant?.paymentQRCode || '')
+  const [isUploading, setIsUploading] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    if (merchant) {
+      setUpiId(merchant.upiId || '')
+      setQrCodeUrl(merchant.paymentQRCode || '')
+    }
+  }, [merchant])
+
+  const handleQRUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsUploading(true)
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('type', 'payment-qr')
+
+    try {
+      const res = await api.post('/uploads/image', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      setQrCodeUrl(res.data.data.url)
+      toast.success('QR code uploaded!')
+    } catch (error) {
+      toast.error('Failed to upload QR code')
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  const handleSave = async () => {
+    setIsSaving(true)
+    try {
+      await api.put(`/merchants/${merchantId}`, {
+        upiId,
+        paymentQRCode: qrCodeUrl
+      })
+      queryClient.invalidateQueries(['my-merchant', merchantId])
+      toast.success('Payment settings saved!')
+    } catch (error) {
+      toast.error('Failed to save payment settings')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // Default dummy QR code
+  const dummyQR = 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/QR_code_for_mobile_English_Wikipedia.svg/1200px-QR_code_for_mobile_English_Wikipedia.svg.png'
+
+  return (
+    <div className="card p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-surface-900">💳 Payment Settings</h3>
+          <p className="text-sm text-surface-500 mt-1">Configure UPI payment for online orders</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* UPI ID */}
+        <div>
+          <label className="block text-sm font-medium text-surface-700 mb-2">UPI ID</label>
+          <input
+            type="text"
+            value={upiId}
+            onChange={(e) => setUpiId(e.target.value)}
+            placeholder="yourname@upi"
+            className="input"
+          />
+          <p className="text-xs text-surface-500 mt-1">Customers can pay to this UPI ID</p>
+        </div>
+
+        {/* QR Code Upload */}
+        <div>
+          <label className="block text-sm font-medium text-surface-700 mb-2">Payment QR Code</label>
+          <div className="flex items-start gap-4">
+            {/* QR Preview */}
+            <div className="w-32 h-32 border-2 border-dashed border-surface-200 rounded-xl overflow-hidden bg-surface-50 flex items-center justify-center">
+              {qrCodeUrl ? (
+                <img src={qrCodeUrl} alt="Payment QR" className="w-full h-full object-contain" />
+              ) : (
+                <div className="text-center p-2">
+                  <DollarSign className="w-8 h-8 mx-auto text-surface-300" />
+                  <p className="text-xs text-surface-400 mt-1">No QR uploaded</p>
+                </div>
+              )}
+            </div>
+            
+            {/* Upload Button */}
+            <div className="flex-1 space-y-2">
+              <label className="btn btn-secondary btn-sm cursor-pointer inline-flex">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleQRUpload}
+                  className="hidden"
+                  disabled={isUploading}
+                />
+                {isUploading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <Image className="w-4 h-4" />
+                    Upload QR Code
+                  </>
+                )}
+              </label>
+              
+              <button
+                onClick={() => setQrCodeUrl(dummyQR)}
+                className="btn btn-outline btn-sm w-full"
+              >
+                Use Demo QR
+              </button>
+              
+              {qrCodeUrl && (
+                <button
+                  onClick={() => setQrCodeUrl('')}
+                  className="text-xs text-red-500 hover:text-red-700"
+                >
+                  Remove QR
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Info Box */}
+      <div className="p-4 bg-yellow-50 rounded-xl border border-yellow-200">
+        <div className="flex items-start gap-3">
+          <span className="text-xl">💡</span>
+          <div className="text-sm">
+            <p className="font-medium text-yellow-800">How it works:</p>
+            <ol className="list-decimal list-inside text-yellow-700 mt-1 space-y-1">
+              <li>When you click "Request Payment", QR code is sent to customer via WhatsApp</li>
+              <li>Customer makes payment and replies with screenshot</li>
+              <li>Screenshot appears in your dashboard for verification</li>
+              <li>After verifying, you can accept the order</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+
+      {/* Save Button */}
+      <div className="flex justify-end">
+        <button
+          onClick={handleSave}
+          disabled={isSaving}
+          className="btn btn-primary"
+        >
+          {isSaving ? (
+            <>
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            <>
+              <Save className="w-4 h-4" />
+              Save Payment Settings
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  )
+}

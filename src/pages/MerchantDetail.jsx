@@ -26,7 +26,17 @@ import {
   ToggleLeft,
   ToggleRight,
   ExternalLink,
-  AlertTriangle
+  AlertTriangle,
+  MessageCircle,
+  CheckCircle,
+  AlertCircle,
+  Key,
+  Shield,
+  Link2,
+  Unlink,
+  Database,
+  ShoppingBag,
+  Zap
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
@@ -137,6 +147,12 @@ export default function MerchantDetail() {
             )}>
               {merchant.isActive ? 'Active' : 'Inactive'}
             </span>
+            {merchant.isStandalone && (
+              <span className="badge ml-2 bg-primary-100 text-primary-700 flex items-center gap-1">
+                <MessageCircle className="w-3 h-3" />
+                Standalone
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -209,21 +225,29 @@ export default function MerchantDetail() {
 
       {/* Tabs */}
       <div className="border-b border-surface-200">
-        <nav className="flex gap-8">
-          {['menu', 'orders', 'location', 'settings'].map((tab) => (
+        <nav className="flex gap-6 overflow-x-auto">
+          {[
+            { id: 'menu', label: 'Menu', icon: null },
+            { id: 'orders', label: 'Orders', icon: null },
+            { id: 'location', label: 'Location', icon: MapPin },
+            { id: 'settings', label: 'WhatsApp & Catalog', icon: MessageCircle }
+          ].map((tab) => (
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
               className={clsx(
-                'pb-4 px-1 text-sm font-medium capitalize transition-colors relative flex items-center gap-2',
-                activeTab === tab
+                'pb-4 px-1 text-sm font-medium whitespace-nowrap transition-colors relative flex items-center gap-2',
+                activeTab === tab.id
                   ? 'text-primary-600'
                   : 'text-surface-500 hover:text-surface-700'
               )}
             >
-              {tab === 'location' && <MapPin className="w-4 h-4" />}
-              {tab}
-              {activeTab === tab && (
+              {tab.icon && <tab.icon className="w-4 h-4" />}
+              {tab.label}
+              {tab.id === 'settings' && merchant?.isStandalone && (
+                <span className="w-2 h-2 rounded-full bg-green-500" />
+              )}
+              {activeTab === tab.id && (
                 <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-500" />
               )}
             </button>
@@ -391,10 +415,7 @@ export default function MerchantDetail() {
       )}
 
       {activeTab === 'settings' && (
-        <div className="card p-6">
-          <h3 className="font-semibold text-surface-900 mb-4">Merchant Settings</h3>
-          <p className="text-surface-500">Settings configuration coming soon...</p>
-        </div>
+        <StandaloneSettings merchant={merchant} merchantId={id} />
       )}
 
       {/* Category Modal */}
@@ -787,6 +808,682 @@ function ProductModal({ merchantId, categories, product, onClose }) {
           </div>
         </form>
       </div>
+    </div>
+  )
+}
+
+// ========================================
+// STANDALONE MERCHANT SETTINGS COMPONENT
+// ========================================
+function StandaloneSettings({ merchant, merchantId }) {
+  const [isStandalone, setIsStandalone] = useState(merchant?.isStandalone || false)
+  const [config, setConfig] = useState({
+    phoneNumberId: merchant?.whatsappConfig?.phoneNumberId || '',
+    accessToken: merchant?.whatsappConfig?.accessToken || '',
+    verifyToken: merchant?.whatsappConfig?.verifyToken || '',
+    businessAccountId: merchant?.whatsappConfig?.businessAccountId || ''
+  })
+  const [isVerifying, setIsVerifying] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [isCreatingCatalog, setIsCreatingCatalog] = useState(false)
+  const [isSyncingProducts, setIsSyncingProducts] = useState(false)
+  const [billingPeriod, setBillingPeriod] = useState(30)
+  const queryClient = useQueryClient()
+
+  // Get WhatsApp status
+  const { data: whatsappStatus, refetch: refetchStatus } = useQuery({
+    queryKey: ['merchant-whatsapp-status', merchantId],
+    queryFn: async () => {
+      const res = await api.get(`/merchants/${merchantId}/whatsapp-status`)
+      return res.data.data
+    },
+    enabled: !!merchantId
+  })
+
+  // Get catalog status
+  const { data: catalogStatus, refetch: refetchCatalog } = useQuery({
+    queryKey: ['merchant-catalog', merchantId],
+    queryFn: async () => {
+      const res = await api.get(`/merchants/${merchantId}/catalog`)
+      return res.data.data
+    },
+    enabled: !!merchantId
+  })
+
+  // Get billing/analytics data
+  const { data: analyticsData, isLoading: analyticsLoading, refetch: refetchAnalytics } = useQuery({
+    queryKey: ['merchant-whatsapp-analytics', merchantId, billingPeriod],
+    queryFn: async () => {
+      const res = await api.get(`/merchants/${merchantId}/whatsapp-analytics?days=${billingPeriod}`)
+      return res.data.data
+    },
+    enabled: !!merchantId && isStandalone && !!whatsappStatus?.whatsappConfig?.isVerified
+  })
+
+  const handleSave = async () => {
+    setIsSaving(true)
+    try {
+      await api.put(`/merchants/${merchantId}`, {
+        isStandalone,
+        whatsappConfig: isStandalone ? config : undefined
+      })
+      toast.success('Settings saved successfully')
+      queryClient.invalidateQueries(['merchant', merchantId])
+      refetchStatus()
+    } catch (error) {
+      toast.error(error.response?.data?.error?.message || 'Failed to save settings')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleVerify = async () => {
+    setIsVerifying(true)
+    try {
+      const res = await api.post(`/merchants/${merchantId}/verify-whatsapp`)
+      toast.success(`Connected! Phone: ${res.data.data.phoneNumber}`)
+      refetchStatus()
+      queryClient.invalidateQueries(['merchant', merchantId])
+    } catch (error) {
+      toast.error(error.response?.data?.error?.message || 'Verification failed')
+    } finally {
+      setIsVerifying(false)
+    }
+  }
+
+  const handleCreateCatalog = async () => {
+    setIsCreatingCatalog(true)
+    try {
+      const res = await api.post(`/catalog/create-for-merchant/${merchantId}`)
+      toast.success(`Catalog created: ${res.data.data.catalogId}`)
+      refetchCatalog()
+      queryClient.invalidateQueries(['merchant', merchantId])
+    } catch (error) {
+      toast.error(error.response?.data?.error?.message || 'Failed to create catalog')
+    } finally {
+      setIsCreatingCatalog(false)
+    }
+  }
+
+  const handleSyncProducts = async () => {
+    setIsSyncingProducts(true)
+    try {
+      const res = await api.post(`/catalog/sync-merchant-catalog/${merchantId}`)
+      toast.success(`Synced ${res.data.data.synced} products to catalog`)
+      refetchCatalog()
+    } catch (error) {
+      toast.error(error.response?.data?.error?.message || 'Failed to sync products')
+    } finally {
+      setIsSyncingProducts(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Standalone Toggle Card */}
+      <div className={clsx(
+        'card p-6 border-2 transition-all',
+        isStandalone ? 'border-primary-500 bg-primary-50/30' : 'border-surface-200'
+      )}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className={clsx(
+              'w-14 h-14 rounded-xl flex items-center justify-center',
+              isStandalone ? 'bg-primary-500 text-white' : 'bg-surface-100 text-surface-400'
+            )}>
+              <MessageCircle className="w-7 h-7" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-surface-900">Tezzu Standalone Merchant</h3>
+              <p className="text-surface-500 mt-1">
+                {isStandalone 
+                  ? 'Customers will message this merchant\'s WhatsApp number directly'
+                  : 'Customers message the central Tezzu WhatsApp number'}
+              </p>
+              {isStandalone && whatsappStatus?.whatsappConfig?.isVerified && (
+                <div className="flex items-center gap-2 mt-2 text-green-600">
+                  <CheckCircle className="w-4 h-4" />
+                  <span className="text-sm font-medium">Connected & Active</span>
+                </div>
+              )}
+            </div>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={isStandalone}
+              onChange={(e) => setIsStandalone(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-14 h-7 bg-surface-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-surface-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-primary-600"></div>
+          </label>
+        </div>
+      </div>
+
+      {isStandalone && (
+        <>
+          {/* Connection Status */}
+          <div className="grid lg:grid-cols-2 gap-6">
+            {/* WhatsApp Connection */}
+            <div className="card p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="font-semibold text-surface-900 flex items-center gap-2">
+                  <Link2 className="w-5 h-5 text-primary-500" />
+                  WhatsApp Connection
+                </h4>
+                {whatsappStatus?.whatsappConfig?.isVerified ? (
+                  <span className="badge badge-success flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3" /> Connected
+                  </span>
+                ) : (
+                  <span className="badge badge-warning flex items-center gap-1">
+                    <Unlink className="w-3 h-3" /> Not Connected
+                  </span>
+                )}
+              </div>
+
+              {whatsappStatus?.whatsappConfig?.isVerified ? (
+                <div className="space-y-3">
+                  <div className="p-4 bg-green-50 rounded-xl">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
+                        <MessageCircle className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-green-800">WhatsApp Business Connected</p>
+                        <p className="text-sm text-green-600">
+                          Phone ID: ***{whatsappStatus.whatsappConfig.phoneNumberId}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-surface-500">
+                    Last verified: {whatsappStatus.whatsappConfig.verifiedAt 
+                      ? new Date(whatsappStatus.whatsappConfig.verifiedAt).toLocaleString()
+                      : 'N/A'}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                      <div className="text-sm text-amber-800">
+                        <p className="font-medium">Not Connected</p>
+                        <p className="mt-1">
+                          Enter your WhatsApp Business API credentials below and click "Verify Connection"
+                        </p>
+                        {whatsappStatus?.whatsappConfig?.verificationError && (
+                          <p className="mt-2 text-red-600">
+                            Error: {whatsappStatus.whatsappConfig.verificationError}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Catalog Status */}
+            <div className="card p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="font-semibold text-surface-900 flex items-center gap-2">
+                  <Database className="w-5 h-5 text-primary-500" />
+                  Product Catalog
+                </h4>
+                {catalogStatus?.catalog?.catalogId ? (
+                  <span className="badge badge-success flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3" /> Active
+                  </span>
+                ) : (
+                  <span className="badge badge-gray flex items-center gap-1">
+                    <Circle className="w-3 h-3" /> Not Created
+                  </span>
+                )}
+              </div>
+
+              {catalogStatus?.catalog?.catalogId ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-surface-50 rounded-xl">
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-surface-500">Catalog ID</p>
+                        <p className="font-mono font-medium">{catalogStatus.catalog.catalogId}</p>
+                      </div>
+                      <div>
+                        <p className="text-surface-500">Status</p>
+                        <p className="font-medium capitalize">{catalogStatus.catalog.syncStatus}</p>
+                      </div>
+                      <div>
+                        <p className="text-surface-500">Products Synced</p>
+                        <p className="font-medium">{catalogStatus.products?.synced || 0} / {catalogStatus.products?.total || 0}</p>
+                      </div>
+                      <div>
+                        <p className="text-surface-500">Last Sync</p>
+                        <p className="font-medium">
+                          {catalogStatus.catalog.lastSyncedAt 
+                            ? new Date(catalogStatus.catalog.lastSyncedAt).toLocaleDateString()
+                            : 'Never'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <button
+                    onClick={handleSyncProducts}
+                    disabled={isSyncingProducts}
+                    className="w-full btn btn-secondary flex items-center justify-center gap-2"
+                  >
+                    {isSyncingProducts ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        Syncing Products...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="w-4 h-4" />
+                        Sync Products to Catalog
+                      </>
+                    )}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
+                    <div className="flex items-start gap-2">
+                      <ShoppingBag className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                      <div className="text-sm text-blue-800">
+                        <p className="font-medium">No Catalog</p>
+                        <p className="mt-1">
+                          Create a catalog to enable product images and multi-product messages on WhatsApp
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <button
+                    onClick={handleCreateCatalog}
+                    disabled={isCreatingCatalog || !whatsappStatus?.whatsappConfig?.isVerified}
+                    className="w-full btn btn-primary flex items-center justify-center gap-2"
+                  >
+                    {isCreatingCatalog ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        Creating Catalog...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4" />
+                        Create Catalog
+                      </>
+                    )}
+                  </button>
+                  {!whatsappStatus?.whatsappConfig?.isVerified && (
+                    <p className="text-xs text-surface-400 text-center">
+                      Connect WhatsApp first to create a catalog
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* WhatsApp Configuration */}
+          <div className="card p-6">
+            <h4 className="font-semibold text-surface-900 mb-4 flex items-center gap-2">
+              <Key className="w-5 h-5 text-primary-500" />
+              WhatsApp Phone Configuration
+            </h4>
+
+            <div className="grid lg:grid-cols-2 gap-4">
+              <div className="lg:col-span-2">
+                <label className="label">Phone Number ID *</label>
+                <input
+                  type="text"
+                  value={config.phoneNumberId}
+                  onChange={(e) => setConfig({ ...config, phoneNumberId: e.target.value })}
+                  className="input font-mono text-lg"
+                  placeholder="e.g. 123456789012345"
+                />
+                <p className="text-xs text-surface-400 mt-1">
+                  Find it: Meta Business Suite → WhatsApp → Phone Numbers → Click number → Phone Number ID
+                </p>
+              </div>
+
+              <div>
+                <label className="label">
+                  Business Account ID
+                  <span className="text-surface-400 font-normal ml-1">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={config.businessAccountId}
+                  onChange={(e) => setConfig({ ...config, businessAccountId: e.target.value })}
+                  className="input font-mono"
+                  placeholder="Only needed for catalog features"
+                />
+              </div>
+
+              <div>
+                <label className="label">
+                  Custom Access Token
+                  <span className="text-surface-400 font-normal ml-1">(optional)</span>
+                </label>
+                <input
+                  type="password"
+                  value={config.accessToken}
+                  onChange={(e) => setConfig({ ...config, accessToken: e.target.value })}
+                  className="input font-mono"
+                  placeholder="Leave empty to use global Tezzu token"
+                />
+                <p className="text-xs text-green-600 mt-1">
+                  ✓ Leave empty - will use your existing Tezzu access token automatically
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={handleSave}
+                disabled={isSaving || !config.phoneNumberId}
+                className="btn btn-primary flex items-center gap-2"
+              >
+                {isSaving ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    Save & Enable
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={handleVerify}
+                disabled={isVerifying || !config.phoneNumberId}
+                className="btn btn-secondary flex items-center gap-2"
+              >
+                {isVerifying ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Verifying...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4" />
+                    Test Connection
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Setup Instructions */}
+          <div className="card p-6 bg-green-50 border-green-200">
+            <h4 className="font-semibold text-green-900 mb-3 flex items-center gap-2">
+              <CheckCircle className="w-5 h-5" />
+              Quick Setup (2 Steps)
+            </h4>
+            <div className="space-y-3">
+              <div className="flex items-start gap-3">
+                <span className="w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">1</span>
+                <div>
+                  <p className="text-sm font-medium text-green-900">Add merchant's phone to your Business Account</p>
+                  <p className="text-xs text-green-700 mt-1">
+                    Meta Business Suite → WhatsApp → Phone Numbers → Add Phone Number
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">2</span>
+                <div>
+                  <p className="text-sm font-medium text-green-900">Enter the Phone Number ID above</p>
+                  <p className="text-xs text-green-700 mt-1">
+                    Find it in: Phone Numbers → Click number → Copy Phone Number ID
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 p-3 bg-white rounded-lg border border-green-200">
+              <p className="text-xs text-green-700">
+                <strong>✨ That's it!</strong> Webhook is already configured. Access Token will use your global Tezzu token automatically.
+              </p>
+            </div>
+          </div>
+
+          {/* How it works */}
+          <div className="card p-6">
+            <h4 className="font-semibold text-surface-900 mb-4">How Standalone Mode Works</h4>
+            <div className="grid md:grid-cols-3 gap-4">
+              <div className="p-4 bg-surface-50 rounded-xl">
+                <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center mb-3">
+                  <span className="text-primary-600 font-bold">1</span>
+                </div>
+                <h5 className="font-medium text-surface-900 mb-1">Customer Messages</h5>
+                <p className="text-sm text-surface-500">
+                  Customers message the merchant's WhatsApp number directly, not Tezzu's
+                </p>
+              </div>
+              <div className="p-4 bg-surface-50 rounded-xl">
+                <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center mb-3">
+                  <span className="text-primary-600 font-bold">2</span>
+                </div>
+                <h5 className="font-medium text-surface-900 mb-1">Same Flow</h5>
+                <p className="text-sm text-surface-500">
+                  The ordering flow is identical - menu browsing, cart, checkout - all branded for this merchant
+                </p>
+              </div>
+              <div className="p-4 bg-surface-50 rounded-xl">
+                <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center mb-3">
+                  <span className="text-primary-600 font-bold">3</span>
+                </div>
+                <h5 className="font-medium text-surface-900 mb-1">Their Catalog</h5>
+                <p className="text-sm text-surface-500">
+                  Products are synced to the merchant's own Meta Commerce catalog with images
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Billing & Analytics */}
+          {whatsappStatus?.whatsappConfig?.isVerified && (
+            <div className="card p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="font-semibold text-surface-900 flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-green-500" />
+                  Usage & Billing
+                </h4>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={billingPeriod}
+                    onChange={(e) => setBillingPeriod(parseInt(e.target.value))}
+                    className="input py-1 px-2 text-sm w-auto"
+                  >
+                    <option value={7}>Last 7 days</option>
+                    <option value={30}>Last 30 days</option>
+                    <option value={90}>Last 90 days</option>
+                  </select>
+                  <button
+                    onClick={() => refetchAnalytics()}
+                    className="p-1.5 hover:bg-surface-100 rounded-lg transition-colors"
+                    title="Refresh"
+                  >
+                    <RefreshCw className={clsx("w-4 h-4 text-surface-400", analyticsLoading && "animate-spin")} />
+                  </button>
+                </div>
+              </div>
+
+              {analyticsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <RefreshCw className="w-6 h-6 animate-spin text-primary-500" />
+                </div>
+              ) : analyticsData ? (
+                <div className="space-y-4">
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="p-4 bg-green-50 rounded-xl border border-green-200">
+                      <p className="text-xs text-green-600 font-medium">Total Conversations</p>
+                      <p className="text-2xl font-bold text-green-700">{analyticsData.conversations?.total || 0}</p>
+                    </div>
+                    <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
+                      <p className="text-xs text-blue-600 font-medium">Estimated Cost</p>
+                      <p className="text-2xl font-bold text-blue-700">₹{analyticsData.billing?.estimatedCost || 0}</p>
+                    </div>
+                    <div className="p-4 bg-purple-50 rounded-xl border border-purple-200">
+                      <p className="text-xs text-purple-600 font-medium">Quality Rating</p>
+                      <p className="text-2xl font-bold text-purple-700 capitalize">{analyticsData.merchant?.qualityRating || 'N/A'}</p>
+                    </div>
+                    <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
+                      <p className="text-xs text-amber-600 font-medium">Messaging Tier</p>
+                      <p className="text-lg font-bold text-amber-700">{analyticsData.merchant?.messagingTier || 'N/A'}</p>
+                    </div>
+                  </div>
+
+                  {/* Conversation Breakdown */}
+                  {analyticsData.conversations?.total > 0 && analyticsData.conversations?.breakdown && (
+                    <div className="p-4 bg-surface-50 rounded-xl">
+                      <h5 className="text-sm font-medium text-surface-700 mb-3">Conversation Breakdown</h5>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                        <div>
+                          <p className="text-surface-500">Marketing</p>
+                          <p className="font-semibold">{analyticsData.conversations.breakdown.marketing || 0}</p>
+                          <p className="text-xs text-surface-400">₹{analyticsData.billing?.breakdown?.marketing || 0}</p>
+                        </div>
+                        <div>
+                          <p className="text-surface-500">Utility</p>
+                          <p className="font-semibold">{analyticsData.conversations.breakdown.utility || 0}</p>
+                          <p className="text-xs text-surface-400">₹{analyticsData.billing?.breakdown?.utility || 0}</p>
+                        </div>
+                        <div>
+                          <p className="text-surface-500">Authentication</p>
+                          <p className="font-semibold">{analyticsData.conversations.breakdown.authentication || 0}</p>
+                          <p className="text-xs text-surface-400">₹{analyticsData.billing?.breakdown?.authentication || 0}</p>
+                        </div>
+                        <div>
+                          <p className="text-surface-500">Service</p>
+                          <p className="font-semibold">{analyticsData.conversations.breakdown.service || 0}</p>
+                          <p className="text-xs text-surface-400">₹{analyticsData.billing?.breakdown?.service || 0}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Verification Status */}
+                  <div className="p-4 bg-surface-50 rounded-xl">
+                    <h5 className="text-sm font-medium text-surface-700 mb-3">Verification Status</h5>
+                    <div className="flex flex-wrap gap-3">
+                      {/* Official Business Account Badge */}
+                      <div className={clsx(
+                        "flex items-center gap-2 px-3 py-2 rounded-lg border",
+                        analyticsData.merchant?.isOfficialBusinessAccount 
+                          ? "bg-green-50 border-green-200" 
+                          : "bg-surface-100 border-surface-200"
+                      )}>
+                        {analyticsData.merchant?.isOfficialBusinessAccount ? (
+                          <>
+                            <span className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                              <CheckCircle className="w-3 h-3 text-white" />
+                            </span>
+                            <span className="text-sm font-medium text-green-700">Official Business ✓</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="w-5 h-5 bg-surface-300 rounded-full flex items-center justify-center">
+                              <CheckCircle className="w-3 h-3 text-white" />
+                            </span>
+                            <span className="text-sm font-medium text-surface-600">Standard Business</span>
+                          </>
+                        )}
+                      </div>
+                      
+                      {/* Account Mode */}
+                      <div className={clsx(
+                        "flex items-center gap-2 px-3 py-2 rounded-lg border",
+                        analyticsData.merchant?.accountMode === 'LIVE' 
+                          ? "bg-green-50 border-green-200" 
+                          : "bg-amber-50 border-amber-200"
+                      )}>
+                        <span className={clsx(
+                          "w-2 h-2 rounded-full",
+                          analyticsData.merchant?.accountMode === 'LIVE' ? "bg-green-500" : "bg-amber-500"
+                        )} />
+                        <span className={clsx(
+                          "text-sm font-medium",
+                          analyticsData.merchant?.accountMode === 'LIVE' ? "text-green-700" : "text-amber-700"
+                        )}>
+                          {analyticsData.merchant?.accountMode || 'N/A'}
+                        </span>
+                      </div>
+
+                      {/* Name Status */}
+                      {analyticsData.merchant?.verifiedName && (
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-blue-50 border-blue-200">
+                          <Shield className="w-4 h-4 text-blue-500" />
+                          <span className="text-sm font-medium text-blue-700">
+                            {analyticsData.merchant.verifiedName}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Verified Tick Info */}
+                    {!analyticsData.merchant?.isOfficialBusinessAccount && (
+                      <div className="mt-3 p-2 bg-surface-100 rounded-lg">
+                        <p className="text-xs text-surface-500">
+                          💡 <strong>Want the green tick?</strong> Apply for Official Business Account status in Meta Business Suite → WhatsApp Manager → Phone Numbers → Request Official Business Account
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Rate Info */}
+                  <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
+                    <p className="text-xs text-blue-700">
+                      <strong>WhatsApp Pricing (India):</strong> Marketing ₹0.80 | Utility ₹0.35 | Authentication ₹0.35 | Service ₹0.35 per conversation
+                    </p>
+                  </div>
+
+                  {/* Phone Info */}
+                  {analyticsData.merchant?.phoneNumber && (
+                    <div className="text-sm text-surface-500">
+                      Phone: <span className="font-medium">{analyticsData.merchant.phoneNumber}</span>
+                      {analyticsData.merchant.verifiedName && (
+                        <span className="ml-2">• {analyticsData.merchant.verifiedName}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="p-4 bg-surface-50 rounded-xl text-center">
+                  <p className="text-sm text-surface-500">No usage data available yet</p>
+                  <p className="text-xs text-surface-400 mt-1">Data will appear once conversations start</p>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {!isStandalone && (
+        <div className="card p-6 bg-surface-50">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 bg-surface-200 rounded-xl flex items-center justify-center">
+              <MessageCircle className="w-6 h-6 text-surface-400" />
+            </div>
+            <div>
+              <h4 className="font-medium text-surface-900">Using Central Tezzu Number</h4>
+              <p className="text-sm text-surface-500 mt-1">
+                Customers message the Tezzu WhatsApp number and select this merchant from the list.
+                Enable standalone mode to let customers message this merchant's own WhatsApp number.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

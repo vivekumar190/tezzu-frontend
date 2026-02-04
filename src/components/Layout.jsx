@@ -16,7 +16,8 @@ import {
   Bell,
   MessageCircle,
   BookOpen,
-  CalendarClock
+  CalendarClock,
+  GitBranch
 } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { useMemo } from 'react'
@@ -28,9 +29,10 @@ const navigation = [
   { name: 'My Shop', href: '/my-shop', icon: Store, merchantOnly: true },
   { name: 'Merchants', href: '/merchants', icon: Store, adminOnly: true },
   { name: 'Orders', href: '/orders', icon: ShoppingBag },
+  { name: 'Order Flow', href: '/order-flow', icon: GitBranch, merchantOnly: true },
   { name: 'Products', href: '/products', icon: Package },
   { name: 'Customers', href: '/customers', icon: UsersRound, adminOnly: true },
-  { name: 'Staff', href: '/staff', icon: Users, merchantOnly: true },
+  { name: 'Staff', href: '/staff-management', icon: Users, merchantOnly: true },
   { name: 'Users', href: '/users', icon: Users, adminOnly: true },
   { name: 'Leads', href: '/leads', icon: UserPlus, adminOnly: true },
   { name: 'Demo Settings', href: '/demo-settings', icon: CalendarClock, adminOnly: true },

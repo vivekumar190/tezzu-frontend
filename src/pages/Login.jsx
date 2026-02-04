@@ -164,6 +164,16 @@ export default function Login() {
               </button>
             </form>
 
+            {/* Staff Portal Link */}
+            <div className="mt-6 pt-6 border-t border-surface-100 text-center">
+              <p className="text-sm text-surface-500 mb-2">Are you a staff member?</p>
+              <a 
+                href="/staff/login" 
+                className="text-primary-600 hover:text-primary-700 font-medium text-sm"
+              >
+                Login to Staff Portal →
+              </a>
+            </div>
           </div>
         </div>
       </div>
