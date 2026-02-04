@@ -1895,8 +1895,7 @@ function PaymentSettings({ merchant, merchantId }) {
 
     setIsUploading(true)
     const formData = new FormData()
-    formData.append('file', file)
-    formData.append('type', 'payment-qr')
+    formData.append('image', file)  // Backend expects 'image' field
 
     try {
       const res = await api.post('/uploads/image', formData, {
@@ -1905,6 +1904,7 @@ function PaymentSettings({ merchant, merchantId }) {
       setQrCodeUrl(res.data.data.url)
       toast.success('QR code uploaded!')
     } catch (error) {
+      console.error('Upload error:', error)
       toast.error('Failed to upload QR code')
     } finally {
       setIsUploading(false)
