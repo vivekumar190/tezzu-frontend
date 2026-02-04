@@ -1874,6 +1874,8 @@ function MerchantLocationSettings({ merchant, merchantId, onUpdate }) {
 function PaymentSettings({ merchant, merchantId }) {
   const [upiId, setUpiId] = useState(merchant?.upiId || '')
   const [qrCodeUrl, setQrCodeUrl] = useState(merchant?.paymentQRCode || '')
+  const [requirePaymentFirst, setRequirePaymentFirst] = useState(merchant?.requirePaymentFirst || false)
+  const [acceptCOD, setAcceptCOD] = useState(merchant?.acceptCOD !== false)
   const [isUploading, setIsUploading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const queryClient = useQueryClient()
@@ -1882,6 +1884,8 @@ function PaymentSettings({ merchant, merchantId }) {
     if (merchant) {
       setUpiId(merchant.upiId || '')
       setQrCodeUrl(merchant.paymentQRCode || '')
+      setRequirePaymentFirst(merchant.requirePaymentFirst || false)
+      setAcceptCOD(merchant.acceptCOD !== false)
     }
   }, [merchant])
 
@@ -1912,7 +1916,9 @@ function PaymentSettings({ merchant, merchantId }) {
     try {
       await api.put(`/merchants/${merchantId}`, {
         upiId,
-        paymentQRCode: qrCodeUrl
+        paymentQRCode: qrCodeUrl,
+        requirePaymentFirst,
+        acceptCOD
       })
       queryClient.invalidateQueries(['my-merchant', merchantId])
       toast.success('Payment settings saved!')
@@ -2008,17 +2014,73 @@ function PaymentSettings({ merchant, merchantId }) {
         </div>
       </div>
 
+      {/* Payment Mode Toggles */}
+      <div className="border-t border-surface-200 pt-6 space-y-4">
+        <h4 className="font-medium text-surface-900">Payment Mode</h4>
+        
+        {/* Require Payment First Toggle */}
+        <div className="flex items-center justify-between p-4 bg-surface-50 rounded-xl">
+          <div>
+            <p className="font-medium text-surface-900">💳 Require Payment First</p>
+            <p className="text-sm text-surface-500">Customers must pay before order is sent to kitchen</p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={requirePaymentFirst}
+              onChange={(e) => setRequirePaymentFirst(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-surface-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-surface-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+          </label>
+        </div>
+
+        {/* Accept COD Toggle */}
+        <div className="flex items-center justify-between p-4 bg-surface-50 rounded-xl">
+          <div>
+            <p className="font-medium text-surface-900">💵 Accept Cash on Delivery</p>
+            <p className="text-sm text-surface-500">Allow customers to pay in cash when order is delivered</p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={acceptCOD}
+              onChange={(e) => setAcceptCOD(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-surface-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-surface-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+          </label>
+        </div>
+
+        {/* Warning if both are disabled */}
+        {!requirePaymentFirst && !acceptCOD && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            ⚠️ You need to enable at least one payment option!
+          </div>
+        )}
+
+        {/* Info about modes */}
+        {requirePaymentFirst && (
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+            ℹ️ <strong>Pay First Mode:</strong> Customer will see payment options before order is placed. 
+            QR code will be sent, and they need to upload a payment screenshot. 
+            Order will wait in "Payment Pending" until you verify.
+          </div>
+        )}
+      </div>
+
       {/* Info Box */}
       <div className="p-4 bg-yellow-50 rounded-xl border border-yellow-200">
         <div className="flex items-start gap-3">
           <span className="text-xl">💡</span>
           <div className="text-sm">
-            <p className="font-medium text-yellow-800">How it works:</p>
+            <p className="font-medium text-yellow-800">How payment flow works:</p>
             <ol className="list-decimal list-inside text-yellow-700 mt-1 space-y-1">
-              <li>When you click "Request Payment", QR code is sent to customer via WhatsApp</li>
+              <li>Customer confirms order → Sees payment options (UPI / COD)</li>
+              <li>If "Pay Now": QR code is sent via WhatsApp</li>
               <li>Customer makes payment and replies with screenshot</li>
-              <li>Screenshot appears in your dashboard for verification</li>
-              <li>After verifying, you can accept the order</li>
+              <li>Order shows in dashboard as "Payment Pending" with screenshot</li>
+              <li>You verify payment and accept the order</li>
             </ol>
           </div>
         </div>
