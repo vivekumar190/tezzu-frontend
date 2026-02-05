@@ -182,8 +182,11 @@ export default function StaffOrders() {
   })
 
   // Build dynamic status flow based on merchant config
-  const merchantFlow = orderFlowData?.orderFlow || []
-  const requiresPayment = merchantFlow.some(step => step.requiresPayment)
+  // API returns { flow: [...] }, not { orderFlow: [...] }
+  const merchantFlow = orderFlowData?.flow || orderFlowData?.orderFlow || []
+  
+  // Debug: Log the flow data
+  console.log('[StaffOrders] Merchant flow loaded:', merchantFlow.length, 'steps')
   
   // Generate dynamic filter tabs based on visibleToRoles from merchant flow
   const dynamicStatusOptions = useMemo(() => {
@@ -211,12 +214,12 @@ export default function StaffOrders() {
     return [{ value: '', label: allLabel }, ...visibleStatuses]
   }, [user?.staffRole, merchantFlow])
   
-  // Build role-specific flow from merchant config
+  // Build role-specific flow from merchant config - ONLY uses flow configuration
   const getDynamicNextStatuses = (currentStatus, role) => {
     // Find current step in flow
     const currentIndex = merchantFlow.findIndex(s => s.status === currentStatus)
     if (currentIndex === -1) {
-      // Fallback to default flow
+      // Fallback to default flow only if no merchant flow configured
       return STATUS_FLOW_BY_ROLE[role]?.[currentStatus] || []
     }
     
@@ -229,34 +232,30 @@ export default function StaffOrders() {
       }
     }
     
-    // Get next possible statuses
+    // Get next possible statuses FROM FLOW CONFIG ONLY
     let nextStatuses = []
     
-    // Special handling for pending - check if payment is required
-    if (currentStatus === 'pending') {
-      if (requiresPayment) {
-        nextStatuses.push('payment_pending')
-      }
-      nextStatuses.push('accepted', 'rejected')
-    } else if (currentStatus === 'payment_pending') {
-      nextStatuses.push('accepted', 'rejected')
+    // Use configured nextStatuses if available
+    if (currentStep.nextStatuses && currentStep.nextStatuses.length > 0) {
+      nextStatuses = [...currentStep.nextStatuses]
     } else {
-      // USE SAVED nextStatuses FROM FLOW CONFIG if available
-      if (currentStep.nextStatuses && currentStep.nextStatuses.length > 0) {
-        nextStatuses = [...currentStep.nextStatuses]
-      } else {
-        // Fallback: Get next step in flow (linear progression)
-        const nextStep = merchantFlow[currentIndex + 1]
-        if (nextStep) {
-          nextStatuses.push(nextStep.status)
-        }
+      // Fallback: Get next step in flow (linear progression)
+      const nextStep = merchantFlow[currentIndex + 1]
+      if (nextStep) {
+        nextStatuses.push(nextStep.status)
       }
     }
     
-    // Apply role restrictions
+    // Apply role restrictions from static config (limits what staff can do)
     const roleFlow = STATUS_FLOW_BY_ROLE[role]
     if (roleFlow && roleFlow[currentStatus]) {
-      return roleFlow[currentStatus].filter(s => nextStatuses.includes(s) || !nextStatuses.length)
+      // Only return statuses that are both in flow config AND allowed for this role
+      return nextStatuses.filter(s => roleFlow[currentStatus].includes(s))
+    }
+    
+    // Manager can do everything in the flow
+    if (role === 'manager') {
+      return nextStatuses
     }
     
     return nextStatuses
@@ -352,9 +351,9 @@ export default function StaffOrders() {
       return allOrders.filter(o => visibleStatuses.includes(o.status))
     }
     
-    // Fallback: Delivery boys only see ready and out_for_delivery orders
+    // Fallback: Delivery boys see ready, out_for_delivery, delivered, and undelivered orders
     if (role === 'delivery_boy') {
-      return allOrders.filter(o => ['ready', 'out_for_delivery', 'delivered'].includes(o.status))
+      return allOrders.filter(o => ['ready', 'out_for_delivery', 'delivered', 'undelivered'].includes(o.status))
     }
     
     // Cooks see pending through ready (kitchen orders)
@@ -373,8 +372,8 @@ export default function StaffOrders() {
     ? orders.filter(o => o.status === 'ready') // For delivery boys, "pending" = ready for pickup
     : orders.filter(o => o.status === 'pending')
   const activeOrders = user?.staffRole === 'delivery_boy'
-    ? orders.filter(o => o.status === 'out_for_delivery')
-    : orders.filter(o => ['accepted', 'preparing', 'ready', 'out_for_delivery'].includes(o.status))
+    ? orders.filter(o => ['out_for_delivery', 'undelivered'].includes(o.status)) // Include undelivered for retry
+    : orders.filter(o => ['accepted', 'preparing', 'ready', 'out_for_delivery', 'undelivered'].includes(o.status))
 
   return (
     <div className="p-4 space-y-4">
@@ -467,7 +466,6 @@ export default function StaffOrders() {
                   onUpdateStatus={(status) => updateStatusMutation.mutate({ orderId: order._id, status })}
                   isPending
                   userRole={user?.staffRole}
-                  requiresPayment={requiresPayment}
                   getNextStatusesFn={getDynamicNextStatuses}
                 />
               ))}
@@ -490,7 +488,6 @@ export default function StaffOrders() {
                   onSelect={() => setSelectedOrder(order)}
                   onUpdateStatus={(status) => updateStatusMutation.mutate({ orderId: order._id, status })}
                   userRole={user?.staffRole}
-                  requiresPayment={requiresPayment}
                   getNextStatusesFn={getDynamicNextStatuses}
                 />
               ))}
@@ -508,7 +505,6 @@ export default function StaffOrders() {
                   onSelect={() => setSelectedOrder(order)}
                   compact
                   userRole={user?.staffRole}
-                  requiresPayment={requiresPayment}
                   getNextStatusesFn={getDynamicNextStatuses}
                 />
               ))}
@@ -535,7 +531,6 @@ export default function StaffOrders() {
             setSelectedOrder(null)
           }}
           userRole={user?.staffRole}
-          requiresPayment={requiresPayment}
           getNextStatusesFn={getDynamicNextStatuses}
         />
       )}
@@ -543,7 +538,7 @@ export default function StaffOrders() {
   )
 }
 
-function OrderCard({ order, onSelect, onAccept, onReject, onUpdateStatus, isPending, compact, userRole, requiresPayment, getNextStatusesFn }) {
+function OrderCard({ order, onSelect, onAccept, onReject, onUpdateStatus, isPending, compact, userRole, getNextStatusesFn }) {
   // Use passed function or fallback to static
   const nextStatuses = getNextStatusesFn ? getNextStatusesFn(order.status, userRole) : getNextStatuses(order.status, userRole)
   
@@ -600,92 +595,46 @@ function OrderCard({ order, onSelect, onAccept, onReject, onUpdateStatus, isPend
         </div>
       </div>
 
-      {/* Quick Actions */}
-      {!compact && (
-        <div className="px-4 pb-4 space-y-2">
-          {/* PENDING: Show Request Payment (if enabled) + Accept */}
-          {order.status === 'pending' && userRole !== 'delivery_boy' && (
-            <div className="flex gap-2">
-              {requiresPayment && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); onUpdateStatus('payment_pending'); }}
-                  className="flex-1 py-3 bg-yellow-500 text-white rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-yellow-600 transition-colors"
-                >
-                  💳 Request Payment
-                </button>
-              )}
+      {/* Quick Actions - ALWAYS use flow-configured nextStatuses */}
+      {!compact && nextStatuses.length > 0 && (
+        <div className="px-4 pb-4">
+          <div className="flex gap-2">
+            {nextStatuses.map((status) => (
               <button
-                onClick={(e) => { e.stopPropagation(); onAccept(); }}
-                className={clsx(
-                  "flex-1 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors",
-                  requiresPayment 
-                    ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200" 
-                    : "bg-emerald-600 text-white hover:bg-emerald-700"
-                )}
-                title={requiresPayment ? "Accept without payment verification (COD)" : "Accept order"}
-              >
-                <CheckCircle className="w-5 h-5" />
-                {requiresPayment ? 'Accept (COD)' : 'Accept'}
-              </button>
-            </div>
-          )}
-
-          {/* PAYMENT PENDING: Show Verify or Waiting */}
-          {order.status === 'payment_pending' && userRole !== 'delivery_boy' && (
-            <div className="space-y-2">
-              {order.paymentProof?.imageUrl ? (
-                <button
-                  onClick={(e) => { e.stopPropagation(); onAccept(); }}
-                  className="w-full py-3 bg-emerald-600 text-white rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-emerald-700 transition-colors"
-                >
-                  <CheckCircle className="w-5 h-5" />
-                  ✓ Verify Payment & Accept
-                </button>
-              ) : (
-                <div className="text-center py-3 bg-yellow-50 text-yellow-700 rounded-xl text-sm">
-                  ⏳ Waiting for customer to send payment screenshot...
-                </div>
-              )}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  const reason = prompt('Reason for rejection (optional):')
-                  onReject(reason)
+                key={status}
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  // For 'accepted' status, use onAccept handler
+                  if (status === 'accepted') {
+                    onAccept();
+                  } else {
+                    onUpdateStatus(status);
+                  }
                 }}
-                className="w-full py-2 bg-red-50 text-red-600 rounded-xl font-semibold text-sm hover:bg-red-100 transition-colors"
+                className={clsx(
+                  'flex-1 py-3 rounded-xl font-semibold transition-colors',
+                  status === 'delivered' && 'bg-green-600 text-white hover:bg-green-700',
+                  status === 'undelivered' && 'bg-red-500 text-white hover:bg-red-600',
+                  status === 'out_for_delivery' && 'bg-yellow-500 text-white hover:bg-yellow-600',
+                  status === 'payment_pending' && 'bg-yellow-500 text-white hover:bg-yellow-600',
+                  status === 'accepted' && 'bg-emerald-600 text-white hover:bg-emerald-700',
+                  status === 'rejected' && 'bg-red-500 text-white hover:bg-red-600',
+                  status === 'preparing' && 'bg-purple-500 text-white hover:bg-purple-600',
+                  status === 'ready' && 'bg-blue-500 text-white hover:bg-blue-600',
+                  !['delivered', 'undelivered', 'out_for_delivery', 'payment_pending', 'accepted', 'rejected', 'preparing', 'ready'].includes(status) && 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                )}
               >
-                Cancel Order
+                {getActionLabel(status)}
               </button>
-            </div>
-          )}
-          
-          {/* Other statuses: Show next action buttons */}
-          {!['pending', 'payment_pending'].includes(order.status) && nextStatuses.length > 0 && (
-            <div className="flex gap-2">
-              {nextStatuses.map((status) => (
-                <button
-                  key={status}
-                  onClick={(e) => { e.stopPropagation(); onUpdateStatus(status); }}
-                  className={clsx(
-                    'flex-1 py-3 rounded-xl font-semibold transition-colors',
-                    status === 'delivered' && 'bg-green-600 text-white hover:bg-green-700',
-                    status === 'undelivered' && 'bg-red-500 text-white hover:bg-red-600',
-                    status === 'out_for_delivery' && 'bg-yellow-500 text-white hover:bg-yellow-600',
-                    !['delivered', 'undelivered', 'out_for_delivery'].includes(status) && 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                  )}
-                >
-                  {getActionLabel(status)}
-                </button>
-              ))}
-            </div>
-          )}
+            ))}
+          </div>
         </div>
       )}
     </div>
   )
 }
 
-function OrderDetailModal({ order, onClose, onUpdateStatus, onAccept, onReject, userRole, requiresPayment, getNextStatusesFn }) {
+function OrderDetailModal({ order, onClose, onUpdateStatus, onAccept, onReject, userRole, getNextStatusesFn }) {
   // Use passed function or fallback to static
   const nextStatuses = getNextStatusesFn ? getNextStatusesFn(order.status, userRole) : getNextStatuses(order.status, userRole)
 
@@ -829,86 +778,32 @@ function OrderDetailModal({ order, onClose, onUpdateStatus, onAccept, onReject, 
           </div>
         </div>
 
-        {/* Actions */}
+        {/* Actions - ALWAYS use flow-configured nextStatuses */}
         <div className="sticky bottom-0 bg-white border-t border-gray-100 p-4 space-y-2">
-          {/* PENDING: Show Request Payment (if enabled) + Accept */}
-          {order.status === 'pending' && userRole !== 'delivery_boy' && (
-            <div className="space-y-2">
-              <div className="flex gap-2">
-                {requiresPayment && (
-                  <button
-                    onClick={() => onUpdateStatus('payment_pending')}
-                    className="flex-1 py-3 bg-yellow-500 text-white rounded-xl font-semibold flex items-center justify-center gap-2"
-                  >
-                    💳 Request Payment
-                  </button>
-                )}
-                <button
-                  onClick={onAccept}
-                  className={clsx(
-                    "flex-1 py-3 rounded-xl font-semibold",
-                    requiresPayment 
-                      ? "bg-emerald-100 text-emerald-700" 
-                      : "bg-emerald-600 text-white"
-                  )}
-                  title={requiresPayment ? "Accept without payment verification (COD)" : "Accept order"}
-                >
-                  {requiresPayment ? 'Accept (COD)' : 'Accept Order'}
-                </button>
-              </div>
-              <button
-                onClick={() => {
-                  const reason = prompt('Reason for rejection (optional):')
-                  onReject(reason)
-                }}
-                className="w-full py-2 bg-red-50 text-red-600 rounded-xl font-semibold text-sm"
-              >
-                Reject Order
-              </button>
-            </div>
-          )}
-
-          {/* PAYMENT PENDING: Show Verify or Waiting */}
-          {order.status === 'payment_pending' && userRole !== 'delivery_boy' && (
-            <div className="space-y-2">
-              {order.paymentProof?.imageUrl ? (
-                <button
-                  onClick={onAccept}
-                  className="w-full py-3 bg-emerald-600 text-white rounded-xl font-semibold flex items-center justify-center gap-2"
-                >
-                  <CheckCircle className="w-5 h-5" />
-                  ✓ Verify Payment & Accept Order
-                </button>
-              ) : (
-                <div className="text-center py-3 bg-yellow-50 text-yellow-700 rounded-xl">
-                  ⏳ Waiting for customer to send payment screenshot...
-                </div>
-              )}
-              <button
-                onClick={() => {
-                  const reason = prompt('Reason for cancellation (optional):')
-                  onReject(reason)
-                }}
-                className="w-full py-2 bg-red-50 text-red-600 rounded-xl font-semibold text-sm"
-              >
-                Cancel Order
-              </button>
-            </div>
-          )}
-
-          {/* Other statuses: Show next action buttons */}
-          {!['pending', 'payment_pending'].includes(order.status) && nextStatuses.length > 0 && (
-            <div className="flex gap-2">
+          {nextStatuses.length > 0 && (
+            <div className="flex gap-2 flex-wrap">
               {nextStatuses.map((status) => (
                 <button
                   key={status}
-                  onClick={() => onUpdateStatus(status)}
+                  onClick={() => {
+                    // For 'accepted' status, use onAccept handler
+                    if (status === 'accepted') {
+                      onAccept();
+                    } else {
+                      onUpdateStatus(status);
+                    }
+                  }}
                   className={clsx(
-                    'flex-1 py-3 rounded-xl font-semibold',
-                    status === 'delivered' && 'bg-green-600 text-white',
-                    status === 'undelivered' && 'bg-red-500 text-white',
-                    status === 'out_for_delivery' && 'bg-yellow-500 text-white',
-                    !['delivered', 'undelivered', 'out_for_delivery'].includes(status) && 'bg-emerald-600 text-white'
+                    'flex-1 min-w-[120px] py-3 rounded-xl font-semibold transition-colors',
+                    status === 'delivered' && 'bg-green-600 text-white hover:bg-green-700',
+                    status === 'undelivered' && 'bg-red-500 text-white hover:bg-red-600',
+                    status === 'out_for_delivery' && 'bg-yellow-500 text-white hover:bg-yellow-600',
+                    status === 'payment_pending' && 'bg-yellow-500 text-white hover:bg-yellow-600',
+                    status === 'accepted' && 'bg-emerald-600 text-white hover:bg-emerald-700',
+                    status === 'rejected' && 'bg-red-500 text-white hover:bg-red-600',
+                    status === 'preparing' && 'bg-purple-500 text-white hover:bg-purple-600',
+                    status === 'ready' && 'bg-blue-500 text-white hover:bg-blue-600',
+                    !['delivered', 'undelivered', 'out_for_delivery', 'payment_pending', 'accepted', 'rejected', 'preparing', 'ready'].includes(status) && 'bg-emerald-600 text-white hover:bg-emerald-700'
                   )}
                 >
                   {getActionLabel(status)}
