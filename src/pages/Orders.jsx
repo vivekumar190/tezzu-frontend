@@ -53,10 +53,19 @@ const STATUS_COLORS = {
   cancelled: 'badge-error'
 }
 
+const DATE_FILTERS = [
+  { value: 'today', label: 'Today' },
+  { value: 'yesterday', label: 'Yesterday' },
+  { value: 'week', label: 'This Week' },
+  { value: 'month', label: 'This Month' },
+  { value: 'all', label: 'All Time' }
+]
+
 export default function Orders() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '')
+  const [dateFilter, setDateFilter] = useState('today') // Default to today
   const [assignModalOrder, setAssignModalOrder] = useState(null)
   const queryClient = useQueryClient()
 
@@ -91,12 +100,40 @@ export default function Orders() {
     return defaultNext[status] || []
   }
 
+  // Calculate date range based on filter
+  const getDateRange = () => {
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    
+    switch (dateFilter) {
+      case 'today':
+        return { startDate: today.toISOString() }
+      case 'yesterday':
+        const yesterday = new Date(today)
+        yesterday.setDate(yesterday.getDate() - 1)
+        return { startDate: yesterday.toISOString(), endDate: today.toISOString() }
+      case 'week':
+        const weekAgo = new Date(today)
+        weekAgo.setDate(weekAgo.getDate() - 7)
+        return { startDate: weekAgo.toISOString() }
+      case 'month':
+        const monthAgo = new Date(today)
+        monthAgo.setMonth(monthAgo.getMonth() - 1)
+        return { startDate: monthAgo.toISOString() }
+      default:
+        return {}
+    }
+  }
+
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['orders', statusFilter],
+    queryKey: ['orders', statusFilter, dateFilter],
     queryFn: async () => {
       const params = new URLSearchParams()
       if (statusFilter) params.append('status', statusFilter)
-      params.append('limit', '50')
+      const dateRange = getDateRange()
+      if (dateRange.startDate) params.append('startDate', dateRange.startDate)
+      if (dateRange.endDate) params.append('endDate', dateRange.endDate)
+      params.append('limit', '100')
       const res = await api.get(`/orders?${params}`)
       return res.data.data
     },
@@ -208,6 +245,25 @@ export default function Orders() {
           <RefreshCw className="w-4 h-4" />
           Refresh
         </button>
+      </div>
+
+      {/* Date Filter Tabs */}
+      <div className="flex gap-2 overflow-x-auto pb-2">
+        {DATE_FILTERS.map(filter => (
+          <button
+            key={filter.value}
+            onClick={() => setDateFilter(filter.value)}
+            className={clsx(
+              'px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-all',
+              dateFilter === filter.value
+                ? 'bg-primary-600 text-white shadow-md'
+                : 'bg-surface-100 text-surface-600 hover:bg-surface-200'
+            )}
+          >
+            {filter.value === 'today' && <Calendar className="w-4 h-4 inline mr-2" />}
+            {filter.label}
+          </button>
+        ))}
       </div>
 
       {/* Filters */}

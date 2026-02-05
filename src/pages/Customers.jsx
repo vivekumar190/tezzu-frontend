@@ -6,6 +6,7 @@ import {
   UserCheck, Clock, IndianRupee, Filter, X, Map, RefreshCw
 } from 'lucide-react';
 import api from '../lib/api';
+import { useAuthStore } from '../store/authStore';
 
 // Customer stats cards
 function StatsCards({ stats }) {
@@ -462,6 +463,9 @@ function CustomerDetailModal({ customer, onClose }) {
 
 // Main Customers page
 export default function Customers() {
+  const { user } = useAuthStore();
+  const isAdmin = user?.role === 'admin';
+  
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
@@ -509,24 +513,30 @@ export default function Customers() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Customers</h1>
-          <p className="text-gray-500">Manage your customer database</p>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {isAdmin ? 'All Customers' : 'My Customers'}
+          </h1>
+          <p className="text-gray-500">
+            {isAdmin ? 'Manage your customer database' : 'Customers who have ordered from your shop'}
+          </p>
         </div>
-        <button
-          onClick={() => setShowZoneReport(!showZoneReport)}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-            showZoneReport 
-              ? 'bg-purple-500 text-white' 
-              : 'bg-purple-50 text-purple-600 hover:bg-purple-100'
-          }`}
-        >
-          <Map className="w-5 h-5" />
-          Zone Matching
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setShowZoneReport(!showZoneReport)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+              showZoneReport 
+                ? 'bg-purple-500 text-white' 
+                : 'bg-purple-50 text-purple-600 hover:bg-purple-100'
+            }`}
+          >
+            <Map className="w-5 h-5" />
+            Zone Matching
+          </button>
+        )}
       </div>
 
-      {/* Zone Matching Report */}
-      {showZoneReport && (
+      {/* Zone Matching Report - Admin Only */}
+      {isAdmin && showZoneReport && (
         <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl border border-purple-200 p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">

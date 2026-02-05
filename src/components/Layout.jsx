@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { 
   LayoutDashboard, 
@@ -22,6 +22,7 @@ import {
 import { useAuthStore } from '../store/authStore'
 import { useMemo } from 'react'
 import { initSocket, disconnectSocket } from '../lib/socket'
+import { formatDistanceToNow } from 'date-fns'
 import clsx from 'clsx'
 
 const navigation = [
@@ -31,7 +32,7 @@ const navigation = [
   { name: 'Orders', href: '/orders', icon: ShoppingBag },
   { name: 'Order Flow', href: '/order-flow', icon: GitBranch, merchantOnly: true },
   { name: 'Products', href: '/products', icon: Package },
-  { name: 'Customers', href: '/customers', icon: UsersRound, adminOnly: true },
+  { name: 'Customers', href: '/customers', icon: UsersRound },
   { name: 'Staff', href: '/staff-management', icon: Users, merchantOnly: true },
   { name: 'Users', href: '/users', icon: Users, adminOnly: true },
   { name: 'Leads', href: '/leads', icon: UserPlus, adminOnly: true },
@@ -45,6 +46,8 @@ const navigation = [
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [notifications, setNotifications] = useState([])
+  const [showNotifications, setShowNotifications] = useState(false)
+  const notificationRef = useRef(null)
   const { user, logout, _hasHydrated } = useAuthStore()
   const navigate = useNavigate()
   
@@ -72,6 +75,17 @@ export default function Layout() {
     }) || []
   }, [userRole, isAdmin, isMerchantAdmin, _hasHydrated, user])
 
+  // Close notification dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (notificationRef.current && !notificationRef.current.contains(event.target)) {
+        setShowNotifications(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
   useEffect(() => {
     try {
       const socket = initSocket()
@@ -83,8 +97,21 @@ export default function Layout() {
               id: Date.now(),
               type: 'order',
               message: `New order #${order.orderNumber}`,
-              time: new Date()
-            }, ...prev].slice(0, 10))
+              time: new Date(),
+              read: false
+            }, ...prev].slice(0, 20))
+          }
+        })
+
+        socket.on('order:updated', (order) => {
+          if (order?.orderNumber) {
+            setNotifications(prev => [{
+              id: Date.now(),
+              type: 'status',
+              message: `Order #${order.orderNumber} → ${order.status}`,
+              time: new Date(),
+              read: false
+            }, ...prev].slice(0, 20))
           }
         })
       }
@@ -100,6 +127,29 @@ export default function Layout() {
       }
     }
   }, [])
+
+  const unreadCount = notifications.filter(n => !n.read).length
+  
+  const markAllAsRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+  }
+
+  const clearNotifications = () => {
+    setNotifications([])
+    setShowNotifications(false)
+  }
+
+  const handleNotificationClick = (notification) => {
+    // Mark as read
+    setNotifications(prev => prev.map(n => 
+      n.id === notification.id ? { ...n, read: true } : n
+    ))
+    // Navigate to orders
+    if (notification.type === 'order' || notification.type === 'status') {
+      navigate('/orders')
+      setShowNotifications(false)
+    }
+  }
 
   const handleLogout = async () => {
     await logout()
@@ -196,13 +246,92 @@ export default function Layout() {
             <div className="flex-1" />
 
             {/* Notifications */}
-            <div className="relative">
-              <button className="relative p-2 text-surface-500 hover:text-surface-700 hover:bg-surface-50 rounded-xl transition-colors">
+            <div className="relative" ref={notificationRef}>
+              <button 
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="relative p-2 text-surface-500 hover:text-surface-700 hover:bg-surface-50 rounded-xl transition-colors"
+              >
                 <Bell className="w-5 h-5" />
-                {notifications.length > 0 && (
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[20px] h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center px-1">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
                 )}
               </button>
+
+              {/* Notification Dropdown */}
+              {showNotifications && (
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-lg border border-surface-100 overflow-hidden z-50">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-surface-100 bg-surface-50">
+                    <h3 className="font-semibold text-surface-900">Notifications</h3>
+                    <div className="flex gap-2">
+                      {unreadCount > 0 && (
+                        <button 
+                          onClick={markAllAsRead}
+                          className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                        >
+                          Mark all read
+                        </button>
+                      )}
+                      {notifications.length > 0 && (
+                        <button 
+                          onClick={clearNotifications}
+                          className="text-xs text-surface-500 hover:text-surface-700"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="max-h-96 overflow-y-auto">
+                    {notifications.length === 0 ? (
+                      <div className="p-8 text-center text-surface-400">
+                        <Bell className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No notifications yet</p>
+                      </div>
+                    ) : (
+                      notifications.map((notification) => (
+                        <button
+                          key={notification.id}
+                          onClick={() => handleNotificationClick(notification)}
+                          className={clsx(
+                            'w-full px-4 py-3 text-left hover:bg-surface-50 transition-colors border-b border-surface-50 last:border-0',
+                            !notification.read && 'bg-primary-50/50'
+                          )}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className={clsx(
+                              'w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0',
+                              notification.type === 'order' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'
+                            )}>
+                              {notification.type === 'order' ? (
+                                <ShoppingBag className="w-4 h-4" />
+                              ) : (
+                                <Package className="w-4 h-4" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className={clsx(
+                                'text-sm truncate',
+                                notification.read ? 'text-surface-600' : 'text-surface-900 font-medium'
+                              )}>
+                                {notification.message}
+                              </p>
+                              <p className="text-xs text-surface-400 mt-0.5">
+                                {formatDistanceToNow(new Date(notification.time), { addSuffix: true })}
+                              </p>
+                            </div>
+                            {!notification.read && (
+                              <div className="w-2 h-2 bg-primary-500 rounded-full flex-shrink-0 mt-1.5" />
+                            )}
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </header>

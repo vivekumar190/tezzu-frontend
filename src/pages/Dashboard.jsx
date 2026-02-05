@@ -22,14 +22,15 @@ import { getSocket, joinMerchantRoom } from '../lib/socket'
 import { useAuthStore } from '../store/authStore'
 import clsx from 'clsx'
 
-const mockChartData = [
-  { name: 'Mon', orders: 12, revenue: 4800 },
-  { name: 'Tue', orders: 19, revenue: 7600 },
-  { name: 'Wed', orders: 15, revenue: 6000 },
-  { name: 'Thu', orders: 25, revenue: 10000 },
-  { name: 'Fri', orders: 32, revenue: 12800 },
-  { name: 'Sat', orders: 45, revenue: 18000 },
-  { name: 'Sun', orders: 38, revenue: 15200 },
+// Fallback chart data (used only if API returns nothing)
+const fallbackChartData = [
+  { name: 'Mon', orders: 0, revenue: 0 },
+  { name: 'Tue', orders: 0, revenue: 0 },
+  { name: 'Wed', orders: 0, revenue: 0 },
+  { name: 'Thu', orders: 0, revenue: 0 },
+  { name: 'Fri', orders: 0, revenue: 0 },
+  { name: 'Sat', orders: 0, revenue: 0 },
+  { name: 'Sun', orders: 0, revenue: 0 },
 ]
 
 export default function Dashboard() {
@@ -249,7 +250,7 @@ export default function Dashboard() {
           </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={mockChartData}>
+              <AreaChart data={dashboardData?.chartData || fallbackChartData}>
                 <defs>
                   <linearGradient id="colorOrders" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#25D366" stopOpacity={0.3}/>
@@ -294,7 +295,7 @@ export default function Dashboard() {
           </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={mockChartData}>
+              <LineChart data={dashboardData?.chartData || fallbackChartData}>
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#71717a', fontSize: 12 }} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fill: '#71717a', fontSize: 12 }} />
                 <Tooltip 
