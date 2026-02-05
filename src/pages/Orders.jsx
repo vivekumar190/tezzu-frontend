@@ -179,11 +179,17 @@ export default function Orders() {
     }
   })
 
-  const verifyPaymentMutation = useMutation({
-    mutationFn: (orderId) => api.post(`/orders/${orderId}/payment-proof`, { isVerified: true }),
-    onSuccess: () => {
+  const verifyAndAcceptMutation = useMutation({
+    mutationFn: (orderId) => api.post(`/orders/${orderId}/payment-proof`, { 
+      isVerified: true, 
+      acceptOrder: true 
+    }),
+    onSuccess: (res) => {
       queryClient.invalidateQueries(['orders'])
-      toast.success('Payment verified!')
+      toast.success(res.data?.message || 'Payment verified and order accepted!')
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.error?.message || 'Failed to verify payment')
     }
   })
 
@@ -192,18 +198,17 @@ export default function Orders() {
     onSuccess: () => {
       queryClient.invalidateQueries(['orders'])
       toast.success('Order accepted')
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.error?.message || 'Failed to accept order')
     }
   })
   
   // Handle status update with special cases
   const handleStatusUpdate = (orderId, status) => {
     if (status === 'verify_payment') {
-      // First verify payment, then accept order
-      verifyPaymentMutation.mutate(orderId, {
-        onSuccess: () => {
-          acceptOrderMutation.mutate(orderId)
-        }
-      })
+      // Single atomic operation: verify payment AND accept order
+      verifyAndAcceptMutation.mutate(orderId)
     } else {
       updateStatusMutation.mutate({ orderId, status })
     }
@@ -395,7 +400,7 @@ function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateSta
 
   // Status labels for buttons
   const statusLabels = {
-    payment_pending: '💳 Request Payment',
+    payment_pending: '💳 Payment Pending',
     accepted: '✅ Accept',
     preparing: '👨‍🍳 Preparing',
     ready: '🍽️ Ready',
@@ -455,23 +460,14 @@ function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateSta
         </div>
       )}
 
-      {/* Quick Actions */}
+      {/* Quick Actions - Pending orders: Move to Payment Pending first */}
       {order.status === 'pending' && (
         <div className="flex gap-2 pt-3 border-t border-surface-100" onClick={e => e.stopPropagation()}>
-          {/* Show "Request Payment" first if payment flow is configured */}
           <button 
             onClick={() => onUpdateStatus('payment_pending')}
             className="btn btn-warning btn-sm flex-1"
           >
-            💳 Request Payment
-          </button>
-          <button 
-            onClick={() => onAccept()}
-            className="btn btn-primary btn-sm flex-1"
-            title="Skip payment and accept directly"
-          >
-            <CheckCircle className="w-4 h-4" />
-            Accept (COD)
+            💳 Mark Payment Pending
           </button>
           <button 
             onClick={() => {
@@ -540,19 +536,28 @@ function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateSta
         </div>
       )}
 
-      {/* Payment Pending - Show accept after payment verified */}
+      {/* Payment Pending - Show screenshot and verify button */}
       {order.status === 'payment_pending' && (
         <div className="pt-3 border-t border-surface-100 space-y-2" onClick={e => e.stopPropagation()}>
           {order.paymentProof?.imageUrl ? (
-            <button 
-              onClick={() => onUpdateStatus('verify_payment')}
-              className="btn btn-success btn-sm w-full"
-            >
-              <CheckCircle className="w-4 h-4" />
-              Verify Payment & Accept
-            </button>
+            <div className="space-y-2">
+              <a href={order.paymentProof.imageUrl} target="_blank" rel="noopener noreferrer">
+                <img 
+                  src={order.paymentProof.imageUrl} 
+                  alt="Payment" 
+                  className="w-full h-24 object-cover rounded-lg border border-surface-200 hover:opacity-80"
+                />
+              </a>
+              <button 
+                onClick={() => onUpdateStatus('verify_payment')}
+                className="btn btn-success btn-sm w-full"
+              >
+                <CheckCircle className="w-4 h-4" />
+                Verify Payment & Accept
+              </button>
+            </div>
           ) : (
-            <div className="text-center text-sm text-yellow-600 py-2">
+            <div className="text-center text-sm text-yellow-600 py-2 bg-yellow-50 rounded-lg">
               ⏳ Waiting for payment screenshot...
             </div>
           )}

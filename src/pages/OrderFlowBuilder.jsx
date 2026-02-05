@@ -174,7 +174,7 @@ export default function OrderFlowBuilder() {
         })
         setFlow(mergedFlow)
       } else {
-        setFlow(DEFAULT_FLOW)
+      setFlow(DEFAULT_FLOW)
       }
       setInitialLoadDone(true)
     }

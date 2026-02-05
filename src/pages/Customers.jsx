@@ -521,17 +521,17 @@ export default function Customers() {
           </p>
         </div>
         {isAdmin && (
-          <button
-            onClick={() => setShowZoneReport(!showZoneReport)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-              showZoneReport 
-                ? 'bg-purple-500 text-white' 
-                : 'bg-purple-50 text-purple-600 hover:bg-purple-100'
-            }`}
-          >
-            <Map className="w-5 h-5" />
-            Zone Matching
-          </button>
+        <button
+          onClick={() => setShowZoneReport(!showZoneReport)}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+            showZoneReport 
+              ? 'bg-purple-500 text-white' 
+              : 'bg-purple-50 text-purple-600 hover:bg-purple-100'
+          }`}
+        >
+          <Map className="w-5 h-5" />
+          Zone Matching
+        </button>
         )}
       </div>
 

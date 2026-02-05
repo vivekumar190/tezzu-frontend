@@ -31,17 +31,11 @@ export default function StaffLayout() {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
 
-  // Initialize audio - create bell sound using Web Audio API
+  // Initialize audio - use the same bell sound as merchant dashboard
   useEffect(() => {
-    // Try to load external sound first, fallback to generated tone
-    const audio = new Audio()
+    const audio = new Audio('/mixkit-happy-bell-alert-601.wav')
     audio.volume = 0.7
-    
-    // Use data URL for a simple notification sound (or external URL)
-    // This is a base64-encoded notification beep sound
-    const soundDataUrl = 'data:audio/wav;base64,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'
-    
-    audio.src = soundDataUrl
+    audio.preload = 'auto'
     audioRef.current = audio
     
     return () => {
@@ -56,11 +50,29 @@ export default function StaffLayout() {
   useEffect(() => {
     try {
       const socket = initSocket()
+      // Get merchant ID (could be object or string)
+      const merchantId = typeof user?.merchant === 'object' ? user?.merchant?._id : user?.merchant
+      console.log('[Staff] Socket init, merchantId:', merchantId)
       
       if (socket) {
-        // Listen for new orders
-        socket.on('order:created', (order) => {
-          console.log('[Staff] New order received:', order?.orderNumber)
+        // Join merchant room when connected
+        socket.on('connect', () => {
+          console.log('[Staff] Socket connected:', socket.id)
+          if (merchantId) {
+            socket.emit('join:merchant', merchantId)
+            console.log('[Staff] Joined merchant room:', merchantId)
+          }
+        })
+
+        // If already connected, join immediately
+        if (socket.connected && merchantId) {
+          socket.emit('join:merchant', merchantId)
+          console.log('[Staff] Joined merchant room (immediate):', merchantId)
+        }
+
+        // Listen for new orders (backend emits 'order:new')
+        socket.on('order:new', (order) => {
+          console.log('[Staff] 📦 New order received:', order?.orderNumber)
           setNewOrderCount(prev => prev + 1)
           
           // Play bell sound if enabled
@@ -82,12 +94,31 @@ export default function StaffLayout() {
         })
 
         // Listen for order updates
-        socket.on('order:updated', () => {
-          // Refresh orders list
+        socket.on('order:updated', (order) => {
+          console.log('[Staff] 🔄 Order updated:', order?.orderNumber, order?.status)
+          setNewOrderCount(prev => prev + 1)
+          
+          // Play bell sound if enabled
+          if (soundEnabled && audioRef.current) {
+            audioRef.current.currentTime = 0
+            audioRef.current.play().catch(err => {
+              console.log('Audio play failed:', err.message)
+            })
+          }
         })
 
         // Listen for order assigned to this staff
         socket.on('order:assigned', (data) => {
+          console.log('[Staff] 👤 Order assigned:', data)
+          if (soundEnabled && audioRef.current) {
+            audioRef.current.currentTime = 0
+            audioRef.current.play().catch(() => {})
+          }
+        })
+
+        // Listen for accepted orders
+        socket.on('order:accepted', (order) => {
+          console.log('[Staff] ✅ Order accepted:', order?.orderNumber)
           if (soundEnabled && audioRef.current) {
             audioRef.current.currentTime = 0
             audioRef.current.play().catch(() => {})
@@ -101,14 +132,16 @@ export default function StaffLayout() {
     return () => {
       try {
         const socket = getSocket()
+        socket?.off('order:new')
         socket?.off('order:created')
         socket?.off('order:updated')
         socket?.off('order:assigned')
+        socket?.off('order:accepted')
       } catch (e) {
         // Ignore cleanup errors
       }
     }
-  }, [soundEnabled])
+  }, [soundEnabled, user?.merchant])
 
   // Request notification permission
   useEffect(() => {

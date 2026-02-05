@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { 
   LayoutDashboard, 
@@ -17,10 +17,11 @@ import {
   MessageCircle,
   BookOpen,
   CalendarClock,
-  GitBranch
+  GitBranch,
+  Volume2,
+  VolumeX
 } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
-import { useMemo } from 'react'
 import { initSocket, disconnectSocket } from '../lib/socket'
 import { formatDistanceToNow } from 'date-fns'
 import clsx from 'clsx'
@@ -47,9 +48,57 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [notifications, setNotifications] = useState([])
   const [showNotifications, setShowNotifications] = useState(false)
+  const [soundEnabled, setSoundEnabled] = useState(true)
+  const [selectedNotification, setSelectedNotification] = useState(null)
   const notificationRef = useRef(null)
   const { user, logout, _hasHydrated } = useAuthStore()
   const navigate = useNavigate()
+
+  // Initialize notification sound from public folder
+  const audioRef = useRef(null)
+  
+  useEffect(() => {
+    // Create audio element with the bell sound
+    const audio = new Audio('/mixkit-happy-bell-alert-601.wav')
+    audio.volume = 0.7
+    audio.preload = 'auto'
+    audioRef.current = audio
+    
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current = null
+      }
+    }
+  }, [])
+
+  // Play notification sound
+  const playNotificationSound = useCallback(() => {
+    if (!soundEnabled || !audioRef.current) return
+    
+    try {
+      audioRef.current.currentTime = 0
+      audioRef.current.play().catch(err => {
+        console.log('Audio play failed:', err.message)
+      })
+    } catch (e) {
+      console.log('Audio error:', e)
+    }
+  }, [soundEnabled])
+
+  const toggleSound = useCallback(() => {
+    setSoundEnabled(prev => {
+      const newValue = !prev
+      // Play test sound when enabling
+      if (newValue && audioRef.current) {
+        setTimeout(() => {
+          audioRef.current.currentTime = 0
+          audioRef.current.play().catch(() => {})
+        }, 50)
+      }
+      return newValue
+    })
+  }, [])
   
   // Get user role safely
   const userRole = user?.role || null
@@ -89,29 +138,87 @@ export default function Layout() {
   useEffect(() => {
     try {
       const socket = initSocket()
+      // Get merchant ID (could be object or string)
+      const merchantId = typeof user?.merchant === 'object' ? user?.merchant?._id : user?.merchant
+      console.log('🔌 Socket init result:', socket ? 'created' : 'null', 'merchantId:', merchantId)
       
       if (socket) {
-        socket.on('order:created', (order) => {
+        // Join merchant room when connected
+        socket.on('connect', () => {
+          console.log('🔌 Socket connected! ID:', socket.id)
+          if (merchantId) {
+            socket.emit('join:merchant', merchantId)
+            console.log('✅ Joined merchant room:', merchantId)
+          }
+        })
+
+        // If already connected, join immediately
+        if (socket.connected && merchantId) {
+          socket.emit('join:merchant', merchantId)
+          console.log('Joined merchant room (immediate):', merchantId)
+        }
+
+        // Listen for new orders (backend emits 'order:new')
+        socket.on('order:new', (order) => {
+          console.log('📦 New order received:', order)
           if (order?.orderNumber) {
             setNotifications(prev => [{
               id: Date.now(),
               type: 'order',
               message: `New order #${order.orderNumber}`,
               time: new Date(),
-              read: false
+              read: false,
+              data: order
             }, ...prev].slice(0, 20))
+            playNotificationSound()
           }
         })
 
+        // Listen for order status updates
         socket.on('order:updated', (order) => {
+          console.log('🔄 Order updated:', order)
           if (order?.orderNumber) {
             setNotifications(prev => [{
               id: Date.now(),
               type: 'status',
-              message: `Order #${order.orderNumber} → ${order.status}`,
+              message: `Order #${order.orderNumber} → ${order.status?.replace(/_/g, ' ')}`,
               time: new Date(),
-              read: false
+              read: false,
+              data: order
             }, ...prev].slice(0, 20))
+            playNotificationSound()
+          }
+        })
+
+        // Listen for accepted orders
+        socket.on('order:accepted', (order) => {
+          console.log('✅ Order accepted:', order)
+          if (order?.orderNumber) {
+            setNotifications(prev => [{
+              id: Date.now(),
+              type: 'accepted',
+              message: `Order #${order.orderNumber} accepted`,
+              time: new Date(),
+              read: false,
+              data: order
+            }, ...prev].slice(0, 20))
+            playNotificationSound()
+          }
+        })
+
+        // Listen for rejected orders
+        socket.on('order:rejected', (order) => {
+          console.log('❌ Order rejected:', order)
+          if (order?.orderNumber) {
+            setNotifications(prev => [{
+              id: Date.now(),
+              type: 'rejected',
+              message: `Order #${order.orderNumber} rejected`,
+              time: new Date(),
+              read: false,
+              data: order
+            }, ...prev].slice(0, 20))
+            playNotificationSound()
           }
         })
       }
@@ -126,7 +233,7 @@ export default function Layout() {
         // Ignore disconnect errors
       }
     }
-  }, [])
+  }, [playNotificationSound, user?.merchant])
 
   const unreadCount = notifications.filter(n => !n.read).length
   
@@ -144,11 +251,14 @@ export default function Layout() {
     setNotifications(prev => prev.map(n => 
       n.id === notification.id ? { ...n, read: true } : n
     ))
-    // Navigate to orders
-    if (notification.type === 'order' || notification.type === 'status') {
-      navigate('/orders')
-      setShowNotifications(false)
-    }
+    // Show notification details modal
+    setSelectedNotification(notification)
+    setShowNotifications(false)
+  }
+
+  const goToOrder = (orderNumber) => {
+    setSelectedNotification(null)
+    navigate('/orders')
   }
 
   const handleLogout = async () => {
@@ -245,6 +355,31 @@ export default function Layout() {
 
             <div className="flex-1" />
 
+            {/* Sound Toggle */}
+            <button
+              onClick={() => {
+                toggleSound()
+                // Force play on toggle for testing
+                if (!soundEnabled && audioRef.current) {
+                  audioRef.current.currentTime = 0
+                  audioRef.current.play().then(() => {
+                    console.log('🔔 Test sound played!')
+                  }).catch(err => {
+                    console.error('Audio error:', err)
+                  })
+                }
+              }}
+              className={clsx(
+                'p-2 rounded-xl transition-colors mr-2',
+                soundEnabled 
+                  ? 'text-emerald-600 hover:bg-emerald-50' 
+                  : 'text-surface-400 hover:bg-surface-50'
+              )}
+              title={soundEnabled ? 'Click to disable sound' : 'Click to enable sound (plays test)'}
+            >
+              {soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+            </button>
+
             {/* Notifications */}
             <div className="relative" ref={notificationRef}>
               <button 
@@ -253,7 +388,7 @@ export default function Layout() {
               >
                 <Bell className="w-5 h-5" />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[20px] h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center px-1">
+                  <span className="absolute -top-1 -right-1 min-w-[20px] h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center px-1 animate-pulse">
                     {unreadCount > 9 ? '9+' : unreadCount}
                   </span>
                 )}
@@ -341,6 +476,122 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Notification Detail Modal */}
+      {selectedNotification && (
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4" onClick={() => setSelectedNotification(null)}>
+          <div 
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className={clsx(
+              'px-6 py-4 border-b',
+              selectedNotification.type === 'order' && 'bg-primary-50 border-primary-100',
+              selectedNotification.type === 'status' && 'bg-blue-50 border-blue-100',
+              selectedNotification.type === 'accepted' && 'bg-emerald-50 border-emerald-100',
+              selectedNotification.type === 'rejected' && 'bg-red-50 border-red-100'
+            )}>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-surface-900">
+                  {selectedNotification.type === 'order' && '📦 New Order'}
+                  {selectedNotification.type === 'status' && '🔄 Status Update'}
+                  {selectedNotification.type === 'accepted' && '✅ Order Accepted'}
+                  {selectedNotification.type === 'rejected' && '❌ Order Rejected'}
+                </h3>
+                <button 
+                  onClick={() => setSelectedNotification(null)}
+                  className="p-1 hover:bg-surface-100 rounded-lg"
+                >
+                  <X className="w-5 h-5 text-surface-400" />
+                </button>
+              </div>
+              <p className="text-sm text-surface-500 mt-1">
+                {formatDistanceToNow(new Date(selectedNotification.time), { addSuffix: true })}
+              </p>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-4 overflow-y-auto max-h-[50vh]">
+              {selectedNotification.data && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-surface-500">Order Number</span>
+                    <span className="font-semibold text-surface-900">#{selectedNotification.data.orderNumber}</span>
+                  </div>
+                  
+                  {selectedNotification.data.customerName && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-surface-500">Customer</span>
+                      <span className="text-surface-900">{selectedNotification.data.customerName}</span>
+                    </div>
+                  )}
+                  
+                  {selectedNotification.data.totalAmount && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-surface-500">Amount</span>
+                      <span className="font-semibold text-emerald-600">₹{selectedNotification.data.totalAmount}</span>
+                    </div>
+                  )}
+                  
+                  {selectedNotification.data.status && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-surface-500">Status</span>
+                      <span className={clsx(
+                        'px-3 py-1 rounded-full text-sm font-medium',
+                        selectedNotification.data.status === 'pending' && 'bg-amber-100 text-amber-700',
+                        selectedNotification.data.status === 'accepted' && 'bg-emerald-100 text-emerald-700',
+                        selectedNotification.data.status === 'preparing' && 'bg-blue-100 text-blue-700',
+                        selectedNotification.data.status === 'ready' && 'bg-purple-100 text-purple-700',
+                        selectedNotification.data.status === 'out_for_delivery' && 'bg-indigo-100 text-indigo-700',
+                        selectedNotification.data.status === 'delivered' && 'bg-green-100 text-green-700',
+                        selectedNotification.data.status === 'rejected' && 'bg-red-100 text-red-700',
+                        selectedNotification.data.status === 'cancelled' && 'bg-gray-100 text-gray-700'
+                      )}>
+                        {selectedNotification.data.status?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      </span>
+                    </div>
+                  )}
+
+                  {selectedNotification.data.items?.length > 0 && (
+                    <div className="pt-4 border-t">
+                      <p className="text-sm text-surface-500 mb-2">Items</p>
+                      <div className="space-y-2">
+                        {selectedNotification.data.items.map((item, idx) => (
+                          <div key={idx} className="flex justify-between text-sm">
+                            <span>{item.quantity}x {item.name}</span>
+                            <span className="text-surface-600">₹{item.totalPrice || item.price * item.quantity}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+              
+              {!selectedNotification.data && (
+                <p className="text-surface-600">{selectedNotification.message}</p>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 bg-surface-50 border-t flex gap-3">
+              <button
+                onClick={() => setSelectedNotification(null)}
+                className="flex-1 px-4 py-2.5 text-surface-600 bg-white border border-surface-200 rounded-xl hover:bg-surface-50 transition-colors"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => goToOrder(selectedNotification.data?.orderNumber)}
+                className="flex-1 px-4 py-2.5 text-white bg-primary-600 rounded-xl hover:bg-primary-700 transition-colors"
+              >
+                View Order
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

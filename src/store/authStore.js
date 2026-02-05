@@ -107,12 +107,12 @@ if (initialState.token && !hasVerified) {
         // Only clear auth if it's a 401 (unauthorized) - not for network errors
         if (error.response?.status === 401) {
           console.log('[Auth] Token expired or invalid')
-          useAuthStore.setState({ 
-            user: null, 
-            token: null, 
-            isAuthenticated: false 
-          })
-          delete api.defaults.headers.common['Authorization']
+        useAuthStore.setState({ 
+          user: null, 
+          token: null, 
+          isAuthenticated: false 
+        })
+        delete api.defaults.headers.common['Authorization']
           sessionStorage.removeItem('powermerchant-auth')
         } else {
           // For other errors (network, server down), keep the session
