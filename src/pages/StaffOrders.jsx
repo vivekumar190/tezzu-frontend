@@ -230,7 +230,7 @@ export default function StaffOrders() {
     }
     
     // Get next possible statuses
-    const nextStatuses = []
+    let nextStatuses = []
     
     // Special handling for pending - check if payment is required
     if (currentStatus === 'pending') {
@@ -241,10 +241,15 @@ export default function StaffOrders() {
     } else if (currentStatus === 'payment_pending') {
       nextStatuses.push('accepted', 'rejected')
     } else {
-      // Get next step in flow
-      const nextStep = merchantFlow[currentIndex + 1]
-      if (nextStep) {
-        nextStatuses.push(nextStep.status)
+      // USE SAVED nextStatuses FROM FLOW CONFIG if available
+      if (currentStep.nextStatuses && currentStep.nextStatuses.length > 0) {
+        nextStatuses = [...currentStep.nextStatuses]
+      } else {
+        // Fallback: Get next step in flow (linear progression)
+        const nextStep = merchantFlow[currentIndex + 1]
+        if (nextStep) {
+          nextStatuses.push(nextStep.status)
+        }
       }
     }
     

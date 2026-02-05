@@ -146,11 +146,29 @@ export default function OrderFlowBuilder() {
   useEffect(() => {
     if (isFetched && !initialLoadDone) {
       if (savedFlow && savedFlow.length > 0) {
-        // Merge saved flow with DEFAULT_FLOW to ensure new fields exist
+        // Merge saved flow with defaults
         const mergedFlow = DEFAULT_FLOW.map(defaultStep => {
           const savedStep = savedFlow.find(s => s.status === defaultStep.status)
           if (savedStep) {
-            return { ...defaultStep, ...savedStep }
+            // Check if field exists in saved data (undefined means not saved, use default)
+            const hasNextStatuses = savedStep.nextStatuses !== undefined
+            const hasVisibleToRoles = savedStep.visibleToRoles !== undefined
+            
+            const merged = {
+              ...defaultStep,
+              ...savedStep,
+              // Use saved value if it exists (even empty array), otherwise use default
+              nextStatuses: hasNextStatuses 
+                ? savedStep.nextStatuses 
+                : (defaultStep.nextStatuses || []),
+              visibleToRoles: hasVisibleToRoles 
+                ? savedStep.visibleToRoles 
+                : (defaultStep.visibleToRoles || []),
+            }
+            
+            console.log(`[Flow] ${defaultStep.status}: saved nextStatuses=${JSON.stringify(savedStep.nextStatuses)}, default=${JSON.stringify(defaultStep.nextStatuses)}, result=${JSON.stringify(merged.nextStatuses)}`)
+            
+            return merged
           }
           return defaultStep
         })
@@ -190,10 +208,23 @@ export default function OrderFlowBuilder() {
 
   const handleReset = () => {
     if (savedFlow && savedFlow.length > 0) {
+      // Reset to saved values (same logic as initial load)
       const mergedFlow = DEFAULT_FLOW.map(defaultStep => {
         const savedStep = savedFlow.find(s => s.status === defaultStep.status)
         if (savedStep) {
-          return { ...defaultStep, ...savedStep }
+          const hasNextStatuses = savedStep.nextStatuses !== undefined
+          const hasVisibleToRoles = savedStep.visibleToRoles !== undefined
+          
+          return {
+            ...defaultStep,
+            ...savedStep,
+            nextStatuses: hasNextStatuses 
+              ? savedStep.nextStatuses 
+              : (defaultStep.nextStatuses || []),
+            visibleToRoles: hasVisibleToRoles 
+              ? savedStep.visibleToRoles 
+              : (defaultStep.visibleToRoles || []),
+          }
         }
         return defaultStep
       })
