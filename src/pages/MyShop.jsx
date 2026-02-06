@@ -30,7 +30,20 @@ import {
   Navigation,
   Layers,
   Circle,
-  ExternalLink
+  ExternalLink,
+  CreditCard,
+  Building,
+  FileText,
+  Shield,
+  Zap,
+  IndianRupee,
+  ArrowRight,
+  BadgeCheck,
+  AlertTriangle,
+  Loader2,
+  Banknote,
+  Wallet,
+  History
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
@@ -1872,6 +1885,7 @@ function MerchantLocationSettings({ merchant, merchantId, onUpdate }) {
 
 // Payment Settings Component
 function PaymentSettings({ merchant, merchantId }) {
+  const [activePaymentTab, setActivePaymentTab] = useState('razorpay')
   const [upiId, setUpiId] = useState(merchant?.upiId || '')
   const [qrCodeUrl, setQrCodeUrl] = useState(merchant?.paymentQRCode || '')
   const [requirePaymentFirst, setRequirePaymentFirst] = useState(merchant?.requirePaymentFirst || false)
@@ -1895,7 +1909,7 @@ function PaymentSettings({ merchant, merchantId }) {
 
     setIsUploading(true)
     const formData = new FormData()
-    formData.append('image', file)  // Backend expects 'image' field
+    formData.append('image', file)
 
     try {
       const res = await api.post('/uploads/image', formData, {
@@ -1911,16 +1925,24 @@ function PaymentSettings({ merchant, merchantId }) {
     }
   }
 
-  const handleSave = async () => {
+  const handleSave = async (overrides = {}) => {
     setIsSaving(true)
     try {
-      await api.put(`/merchants/${merchantId}`, {
+      const payload = {
         upiId,
         paymentQRCode: qrCodeUrl,
         requirePaymentFirst,
-        acceptCOD
-      })
-      queryClient.invalidateQueries(['my-merchant', merchantId])
+        acceptCOD,
+        ...overrides
+      }
+      const res = await api.put(`/merchants/${merchantId}`, payload)
+      // Update cache with server response so useEffect doesn't reset state from stale refetch
+      const updatedMerchant = res.data?.data?.merchant
+      if (updatedMerchant) {
+        queryClient.setQueryData(['my-merchant', merchantId], updatedMerchant)
+      } else {
+        queryClient.invalidateQueries(['my-merchant', merchantId])
+      }
       toast.success('Payment settings saved!')
     } catch (error) {
       toast.error('Failed to save payment settings')
@@ -1929,112 +1951,145 @@ function PaymentSettings({ merchant, merchantId }) {
     }
   }
 
-  // Default dummy QR code
   const dummyQR = 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/QR_code_for_mobile_English_Wikipedia.svg/1200px-QR_code_for_mobile_English_Wikipedia.svg.png'
 
   return (
-    <div className="card p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-surface-900">💳 Payment Settings</h3>
-          <p className="text-sm text-surface-500 mt-1">Configure UPI payment for online orders</p>
-        </div>
+    <div className="space-y-6">
+      {/* Payment Tabs */}
+      <div className="card p-1 bg-surface-100 inline-flex rounded-xl">
+        <button
+          onClick={() => setActivePaymentTab('razorpay')}
+          className={clsx(
+            'px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
+            activePaymentTab === 'razorpay' 
+              ? 'bg-white shadow text-primary-600' 
+              : 'text-surface-600 hover:text-surface-900'
+          )}
+        >
+          <Zap className="w-4 h-4" />
+          Razorpay (Automatic)
+        </button>
+        <button
+          onClick={() => setActivePaymentTab('manual')}
+          className={clsx(
+            'px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
+            activePaymentTab === 'manual' 
+              ? 'bg-white shadow text-primary-600' 
+              : 'text-surface-600 hover:text-surface-900'
+          )}
+        >
+          <Wallet className="w-4 h-4" />
+          Manual (QR Code)
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* UPI ID */}
-        <div>
-          <label className="block text-sm font-medium text-surface-700 mb-2">UPI ID</label>
-          <input
-            type="text"
-            value={upiId}
-            onChange={(e) => setUpiId(e.target.value)}
-            placeholder="yourname@upi"
-            className="input"
-          />
-          <p className="text-xs text-surface-500 mt-1">Customers can pay to this UPI ID</p>
-        </div>
+      {/* Razorpay Tab */}
+      {activePaymentTab === 'razorpay' && (
+        <RazorpaySettings merchant={merchant} merchantId={merchantId} />
+      )}
 
-        {/* QR Code Upload */}
-        <div>
-          <label className="block text-sm font-medium text-surface-700 mb-2">Payment QR Code</label>
-          <div className="flex items-start gap-4">
-            {/* QR Preview */}
-            <div className="w-32 h-32 border-2 border-dashed border-surface-200 rounded-xl overflow-hidden bg-surface-50 flex items-center justify-center">
-              {qrCodeUrl ? (
-                <img src={qrCodeUrl} alt="Payment QR" className="w-full h-full object-contain" />
-              ) : (
-                <div className="text-center p-2">
-                  <DollarSign className="w-8 h-8 mx-auto text-surface-300" />
-                  <p className="text-xs text-surface-400 mt-1">No QR uploaded</p>
+      {/* Manual QR Tab */}
+      {activePaymentTab === 'manual' && (
+        <div className="card p-6 space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-surface-900">📱 Manual Payment (QR Code)</h3>
+              <p className="text-sm text-surface-500 mt-1">Customer pays via QR and sends screenshot for verification</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* UPI ID */}
+            <div>
+              <label className="block text-sm font-medium text-surface-700 mb-2">UPI ID</label>
+              <input
+                type="text"
+                value={upiId}
+                onChange={(e) => setUpiId(e.target.value)}
+                placeholder="yourname@upi"
+                className="input"
+              />
+              <p className="text-xs text-surface-500 mt-1">Customers can pay to this UPI ID</p>
+            </div>
+
+            {/* QR Code Upload */}
+            <div>
+              <label className="block text-sm font-medium text-surface-700 mb-2">Payment QR Code</label>
+              <div className="flex items-start gap-4">
+                <div className="w-32 h-32 border-2 border-dashed border-surface-200 rounded-xl overflow-hidden bg-surface-50 flex items-center justify-center">
+                  {qrCodeUrl ? (
+                    <img src={qrCodeUrl} alt="Payment QR" className="w-full h-full object-contain" />
+                  ) : (
+                    <div className="text-center p-2">
+                      <DollarSign className="w-8 h-8 mx-auto text-surface-300" />
+                      <p className="text-xs text-surface-400 mt-1">No QR uploaded</p>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-            
-            {/* Upload Button */}
-            <div className="flex-1 space-y-2">
-              <label className="btn btn-secondary btn-sm cursor-pointer inline-flex">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleQRUpload}
-                  className="hidden"
-                  disabled={isUploading}
-                />
-                {isUploading ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    Uploading...
-                  </>
-                ) : (
-                  <>
-                    <Image className="w-4 h-4" />
-                    Upload QR Code
-                  </>
-                )}
-              </label>
-              
-              <button
-                onClick={() => setQrCodeUrl(dummyQR)}
-                className="btn btn-outline btn-sm w-full"
-              >
-                Use Demo QR
-              </button>
-              
-              {qrCodeUrl && (
-                <button
-                  onClick={() => setQrCodeUrl('')}
-                  className="text-xs text-red-500 hover:text-red-700"
-                >
-                  Remove QR
-                </button>
-              )}
+                
+                <div className="flex-1 space-y-2">
+                  <label className="btn btn-secondary btn-sm cursor-pointer inline-flex">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleQRUpload}
+                      className="hidden"
+                      disabled={isUploading}
+                    />
+                    {isUploading ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <Image className="w-4 h-4" />
+                        Upload QR Code
+                      </>
+                    )}
+                  </label>
+                  
+                  <button onClick={() => setQrCodeUrl(dummyQR)} className="btn btn-outline btn-sm w-full">
+                    Use Demo QR
+                  </button>
+                  
+                  {qrCodeUrl && (
+                    <button onClick={() => setQrCodeUrl('')} className="text-xs text-red-500 hover:text-red-700">
+                      Remove QR
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* Payment Mode Toggles */}
-      <div className="border-t border-surface-200 pt-6 space-y-4">
-        <h4 className="font-medium text-surface-900">Payment Mode</h4>
+          {/* Info Box */}
+          <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <p className="font-medium text-amber-800">Manual verification required</p>
+                <p className="text-amber-700 mt-1">
+                  With QR code payments, you'll need to manually verify each payment screenshot. 
+                  For automatic verification, set up Razorpay above.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Save Button */}
+          <div className="flex justify-end">
+            <button onClick={handleSave} disabled={isSaving} className="btn btn-primary">
+              {isSaving ? <><RefreshCw className="w-4 h-4 animate-spin" /> Saving...</> : <><Save className="w-4 h-4" /> Save QR Settings</>}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Mode Settings (applies to both) */}
+      <div className="card p-6 space-y-4">
+        <h4 className="font-semibold text-surface-900">Payment Options</h4>
         
-        {/* Require Payment First Toggle */}
-        <div className="flex items-center justify-between p-4 bg-surface-50 rounded-xl">
-          <div>
-            <p className="font-medium text-surface-900">💳 Require Payment First</p>
-            <p className="text-sm text-surface-500">Customers must pay before order is sent to kitchen</p>
-          </div>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              checked={requirePaymentFirst}
-              onChange={(e) => setRequirePaymentFirst(e.target.checked)}
-              className="sr-only peer"
-            />
-            <div className="w-11 h-6 bg-surface-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-surface-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
-          </label>
-        </div>
-
         {/* Accept COD Toggle */}
         <div className="flex items-center justify-between p-4 bg-surface-50 rounded-xl">
           <div>
@@ -2045,66 +2100,652 @@ function PaymentSettings({ merchant, merchantId }) {
             <input
               type="checkbox"
               checked={acceptCOD}
-              onChange={(e) => setAcceptCOD(e.target.checked)}
+              onChange={(e) => { const v = e.target.checked; setAcceptCOD(v); handleSave({ acceptCOD: v }) }}
               className="sr-only peer"
             />
             <div className="w-11 h-6 bg-surface-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-surface-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
           </label>
         </div>
 
-        {/* Warning if both are disabled */}
-        {!requirePaymentFirst && !acceptCOD && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-            ⚠️ You need to enable at least one payment option!
+        {/* Require Payment First Toggle */}
+        <div className="flex items-center justify-between p-4 bg-surface-50 rounded-xl">
+          <div>
+            <p className="font-medium text-surface-900">💳 Require Payment First</p>
+            <p className="text-sm text-surface-500">Customers must pay before order is sent to kitchen</p>
           </div>
-        )}
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={requirePaymentFirst}
+              onChange={(e) => { const v = e.target.checked; setRequirePaymentFirst(v); handleSave({ requirePaymentFirst: v }) }}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-surface-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-surface-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+          </label>
+        </div>
+      </div>
+    </div>
+  )
+}
 
-        {/* Info about modes */}
-        {requirePaymentFirst && (
-          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
-            ℹ️ <strong>Pay First Mode:</strong> Customer will see payment options before order is placed. 
-            QR code will be sent, and they need to upload a payment screenshot. 
-            Order will wait in "Payment Pending" until you verify.
+// Razorpay Settings Component
+function RazorpaySettings({ merchant, merchantId }) {
+  const [showKycModal, setShowKycModal] = useState(false)
+  const [showPaymentsModal, setShowPaymentsModal] = useState(false)
+  const queryClient = useQueryClient()
+
+  // Fetch Razorpay status
+  const { data: razorpayStatus, isLoading, refetch } = useQuery({
+    queryKey: ['razorpay-status', merchantId],
+    queryFn: async () => {
+      const res = await api.get(`/merchants/${merchantId}/razorpay/status`)
+      return res.data.data
+    },
+    enabled: !!merchantId,
+    refetchInterval: 30000 // Refresh every 30s to check for KYC updates
+  })
+
+  // Toggle Razorpay mutation
+  const toggleRazorpay = useMutation({
+    mutationFn: () => api.patch(`/merchants/${merchantId}/razorpay/toggle`),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries(['razorpay-status', merchantId])
+      toast.success(res.data.message)
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.error?.message || 'Failed to toggle Razorpay')
+    }
+  })
+
+  const status = razorpayStatus?.razorpay
+  const isActivated = status?.accountStatus === 'activated'
+  const isEnabled = status?.isEnabled
+  const hasAccount = status?.hasAccount
+  const platformFee = razorpayStatus?.platformFee || 5
+
+  if (isLoading) {
+    return (
+      <div className="card p-12 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Main Status Card */}
+      <div className={clsx(
+        'card p-6 border-l-4',
+        isEnabled ? 'border-l-green-500 bg-green-50/50' : 
+        isActivated ? 'border-l-blue-500 bg-blue-50/50' : 
+        hasAccount ? 'border-l-amber-500 bg-amber-50/50' : 
+        'border-l-surface-300 bg-surface-50'
+      )}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className={clsx(
+              'w-14 h-14 rounded-2xl flex items-center justify-center',
+              isEnabled ? 'bg-green-100 text-green-600' :
+              isActivated ? 'bg-blue-100 text-blue-600' :
+              hasAccount ? 'bg-amber-100 text-amber-600' :
+              'bg-surface-200 text-surface-500'
+            )}>
+              {isEnabled ? <BadgeCheck className="w-7 h-7" /> :
+               isActivated ? <Shield className="w-7 h-7" /> :
+               hasAccount ? <Loader2 className="w-7 h-7 animate-spin" /> :
+               <CreditCard className="w-7 h-7" />}
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-surface-900">
+                {isEnabled ? 'Razorpay Payments Active' :
+                 isActivated ? 'Ready to Enable' :
+                 hasAccount ? 'KYC In Progress' :
+                 'Set Up Automatic Payments'}
+              </h3>
+              <p className="text-sm text-surface-600 mt-1">
+                {isEnabled ? 'Customers pay online, you receive money automatically minus ₹' + platformFee + ' platform fee' :
+                 isActivated ? 'Your account is verified. Enable to start accepting payments.' :
+                 hasAccount ? `KYC Status: ${status?.kycStatus?.replace('_', ' ') || 'pending'}` :
+                 'Complete KYC to receive payments directly to your bank account'}
+              </p>
+              
+              {/* Status badges */}
+              <div className="flex flex-wrap gap-2 mt-3">
+                {hasAccount && (
+                  <span className={clsx(
+                    'badge text-xs',
+                    status?.accountStatus === 'activated' ? 'badge-success' :
+                    status?.accountStatus === 'under_review' ? 'badge-warning' :
+                    'badge-gray'
+                  )}>
+                    Account: {status?.accountStatus || 'pending'}
+                  </span>
+                )}
+                {hasAccount && (
+                  <span className={clsx(
+                    'badge text-xs',
+                    status?.kycStatus === 'verified' ? 'badge-success' :
+                    status?.kycStatus === 'submitted' ? 'badge-warning' :
+                    status?.kycStatus === 'rejected' ? 'badge-danger' :
+                    'badge-gray'
+                  )}>
+                    KYC: {status?.kycStatus || 'pending'}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex flex-col gap-2">
+            {!hasAccount && (
+              <button onClick={() => setShowKycModal(true)} className="btn btn-primary">
+                <FileText className="w-4 h-4" />
+                Start KYC
+              </button>
+            )}
+            {isActivated && !isEnabled && (
+              <button onClick={() => toggleRazorpay.mutate()} disabled={toggleRazorpay.isPending} className="btn btn-primary">
+                {toggleRazorpay.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                Enable Razorpay
+              </button>
+            )}
+            {isEnabled && (
+              <button onClick={() => toggleRazorpay.mutate()} disabled={toggleRazorpay.isPending} className="btn btn-secondary">
+                {toggleRazorpay.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ToggleRight className="w-4 h-4" />}
+                Disable
+              </button>
+            )}
+            <button onClick={() => refetch()} className="btn btn-ghost btn-sm">
+              <RefreshCw className="w-4 h-4" />
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        {/* Error display */}
+        {status?.error && (
+          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm text-red-700">
+              <AlertTriangle className="w-4 h-4 inline mr-1" />
+              {status.error.message}
+            </p>
           </div>
         )}
       </div>
 
-      {/* Info Box */}
-      <div className="p-4 bg-yellow-50 rounded-xl border border-yellow-200">
-        <div className="flex items-start gap-3">
-          <span className="text-xl">💡</span>
-          <div className="text-sm">
-            <p className="font-medium text-yellow-800">How payment flow works:</p>
-            <ol className="list-decimal list-inside text-yellow-700 mt-1 space-y-1">
-              <li>Customer confirms order → Sees payment options (UPI / COD)</li>
-              <li>If "Pay Now": QR code is sent via WhatsApp</li>
-              <li>Customer makes payment and replies with screenshot</li>
-              <li>Order shows in dashboard as "Payment Pending" with screenshot</li>
-              <li>You verify payment and accept the order</li>
-            </ol>
+      {/* Features Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="card p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
+              <Zap className="w-5 h-5 text-green-600" />
+            </div>
+            <div>
+              <p className="font-medium text-surface-900">Auto Confirmation</p>
+              <p className="text-xs text-surface-500">Orders confirm instantly on payment</p>
+            </div>
+          </div>
+        </div>
+        <div className="card p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+              <Banknote className="w-5 h-5 text-blue-600" />
+            </div>
+            <div>
+              <p className="font-medium text-surface-900">Direct Settlement</p>
+              <p className="text-xs text-surface-500">Money goes to your bank (T+2)</p>
+            </div>
+          </div>
+        </div>
+        <div className="card p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
+              <IndianRupee className="w-5 h-5 text-purple-600" />
+            </div>
+            <div>
+              <p className="font-medium text-surface-900">₹{platformFee} Per Order</p>
+              <p className="text-xs text-surface-500">Only pay when you earn</p>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Save Button */}
-      <div className="flex justify-end">
-        <button
-          onClick={handleSave}
-          disabled={isSaving}
-          className="btn btn-primary"
-        >
-          {isSaving ? (
+      {/* Bank Details & Payment History (if account exists) */}
+      {hasAccount && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Bank Details */}
+          <div className="card p-6">
+            <h4 className="font-semibold text-surface-900 mb-4 flex items-center gap-2">
+              <Building className="w-5 h-5 text-primary-500" />
+              Bank Account
+            </h4>
+            {status?.bankDetails ? (
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-surface-500">Account</span>
+                  <span className="font-mono">{status.bankDetails.accountNumber}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-surface-500">IFSC</span>
+                  <span className="font-mono">{status.bankDetails.ifscCode}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-surface-500">Name</span>
+                  <span>{status.bankDetails.beneficiaryName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-surface-500">Status</span>
+                  <span className={status.bankDetails.isVerified ? 'text-green-600' : 'text-amber-600'}>
+                    {status.bankDetails.isVerified ? '✓ Verified' : 'Pending'}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                <Building className="w-8 h-8 mx-auto text-surface-300 mb-2" />
+                <p className="text-sm text-surface-500">Bank details not added yet</p>
+                <button onClick={() => setShowKycModal(true)} className="btn btn-secondary btn-sm mt-2">
+                  Add Bank Details
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Payment Summary */}
+          <div className="card p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="font-semibold text-surface-900 flex items-center gap-2">
+                <History className="w-5 h-5 text-primary-500" />
+                Payment Summary
+              </h4>
+              <button onClick={() => setShowPaymentsModal(true)} className="text-sm text-primary-600 hover:underline">
+                View All
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-3 bg-green-50 rounded-xl text-center">
+                <p className="text-2xl font-bold text-green-600">₹0</p>
+                <p className="text-xs text-green-700">Total Collected</p>
+              </div>
+              <div className="p-3 bg-blue-50 rounded-xl text-center">
+                <p className="text-2xl font-bold text-blue-600">₹0</p>
+                <p className="text-xs text-blue-700">Settled</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* How it works */}
+      <div className="card p-6 bg-gradient-to-r from-primary-50 to-blue-50">
+        <h4 className="font-semibold text-surface-900 mb-4">How Razorpay payments work</h4>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {[
+            { icon: '1️⃣', title: 'Customer Orders', desc: 'Selects "Pay Now" at checkout' },
+            { icon: '2️⃣', title: 'Payment Link', desc: 'Sent via WhatsApp automatically' },
+            { icon: '3️⃣', title: 'Auto Confirm', desc: 'Order confirmed on payment' },
+            { icon: '4️⃣', title: 'Settlement', desc: `₹(Amount - ${platformFee}) to your bank` }
+          ].map((step, i) => (
+            <div key={i} className="text-center">
+              <div className="text-2xl mb-2">{step.icon}</div>
+              <p className="font-medium text-surface-900 text-sm">{step.title}</p>
+              <p className="text-xs text-surface-600 mt-1">{step.desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* KYC Modal */}
+      {showKycModal && (
+        <RazorpayKycModal
+          merchantId={merchantId}
+          merchant={merchant}
+          existingData={status}
+          onClose={() => setShowKycModal(false)}
+          onSuccess={() => {
+            queryClient.invalidateQueries(['razorpay-status', merchantId])
+            setShowKycModal(false)
+          }}
+        />
+      )}
+
+      {/* Payments Modal */}
+      {showPaymentsModal && (
+        <RazorpayPaymentsModal
+          merchantId={merchantId}
+          onClose={() => setShowPaymentsModal(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+// Razorpay KYC Modal
+function RazorpayKycModal({ merchantId, merchant, existingData, onClose, onSuccess }) {
+  const [step, setStep] = useState(existingData?.razorpay?.hasAccount ? 2 : 1)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [formData, setFormData] = useState({
+    businessName: merchant?.name || '',
+    contactName: '',
+    phone: merchant?.whatsappNumber?.replace(/^\+/, '') || '',
+    email: merchant?.email || '',
+    pan: existingData?.razorpay?.kycDocuments?.pan?.replace(/\*/g, '') || '',
+    gst: existingData?.razorpay?.kycDocuments?.gst || '',
+    businessType: existingData?.razorpay?.kycDocuments?.businessType || 'individual',
+    accountNumber: '',
+    ifscCode: '',
+    beneficiaryName: ''
+  })
+
+  const handleCreateAccount = async () => {
+    if (!formData.businessName || !formData.contactName || !formData.phone || !formData.email || !formData.pan) {
+      toast.error('Please fill all required fields')
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      await api.post(`/merchants/${merchantId}/razorpay/create-account`, {
+        businessName: formData.businessName,
+        contactName: formData.contactName,
+        phone: formData.phone,
+        email: formData.email,
+        pan: formData.pan,
+        gst: formData.gst,
+        businessType: formData.businessType
+      })
+      toast.success('Razorpay account created! Now add your bank details.')
+      setStep(2)
+    } catch (error) {
+      toast.error(error.response?.data?.error?.message || 'Failed to create account')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleSubmitBank = async () => {
+    if (!formData.accountNumber || !formData.ifscCode || !formData.beneficiaryName) {
+      toast.error('Please fill all bank details')
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      await api.post(`/merchants/${merchantId}/razorpay/bank-details`, {
+        accountNumber: formData.accountNumber,
+        ifscCode: formData.ifscCode,
+        beneficiaryName: formData.beneficiaryName
+      })
+      toast.success('Bank details submitted! Verification in progress.')
+      onSuccess()
+    } catch (error) {
+      toast.error(error.response?.data?.error?.message || 'Failed to submit bank details')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full my-8">
+        <div className="flex items-center justify-between p-6 border-b">
+          <div>
+            <h3 className="text-lg font-semibold">
+              {step === 1 ? 'Complete KYC' : 'Add Bank Details'}
+            </h3>
+            <p className="text-sm text-surface-500">Step {step} of 2</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-surface-100 rounded-lg">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        
+        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+          {step === 1 && (
             <>
-              <RefreshCw className="w-4 h-4 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            <>
-              <Save className="w-4 h-4" />
-              Save Payment Settings
+              <div>
+                <label className="label">Business Name *</label>
+                <input
+                  type="text"
+                  value={formData.businessName}
+                  onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
+                  className="input"
+                  placeholder="Your Shop Name"
+                />
+              </div>
+              <div>
+                <label className="label">Contact Person Name *</label>
+                <input
+                  type="text"
+                  value={formData.contactName}
+                  onChange={(e) => setFormData({ ...formData, contactName: e.target.value })}
+                  className="input"
+                  placeholder="Full Name"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Phone *</label>
+                  <input
+                    type="tel"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    className="input"
+                    placeholder="9876543210"
+                  />
+                </div>
+                <div>
+                  <label className="label">Email *</label>
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="input"
+                    placeholder="email@example.com"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">PAN Number *</label>
+                  <input
+                    type="text"
+                    value={formData.pan}
+                    onChange={(e) => setFormData({ ...formData, pan: e.target.value.toUpperCase() })}
+                    className="input font-mono"
+                    placeholder="ABCDE1234F"
+                    maxLength={10}
+                  />
+                </div>
+                <div>
+                  <label className="label">GST Number (Optional)</label>
+                  <input
+                    type="text"
+                    value={formData.gst}
+                    onChange={(e) => setFormData({ ...formData, gst: e.target.value.toUpperCase() })}
+                    className="input font-mono"
+                    placeholder="22AAAAA0000A1Z5"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="label">Business Type</label>
+                <select
+                  value={formData.businessType}
+                  onChange={(e) => setFormData({ ...formData, businessType: e.target.value })}
+                  className="input"
+                >
+                  <option value="individual">Individual / Unregistered</option>
+                  <option value="proprietorship">Proprietorship</option>
+                  <option value="partnership">Partnership</option>
+                  <option value="private_limited">Private Limited</option>
+                  <option value="llp">LLP</option>
+                </select>
+              </div>
+
+              <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
+                <p className="font-medium">ℹ️ GST is not mandatory</p>
+                <p className="mt-1">Individual businesses can complete KYC with just PAN + Aadhaar</p>
+              </div>
             </>
           )}
-        </button>
+
+          {step === 2 && (
+            <>
+              <div className="p-4 bg-green-50 rounded-xl mb-4">
+                <div className="flex items-center gap-2 text-green-700">
+                  <CheckCircle className="w-5 h-5" />
+                  <span className="font-medium">Account created! Now add your bank details.</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="label">Bank Account Number *</label>
+                <input
+                  type="text"
+                  value={formData.accountNumber}
+                  onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value })}
+                  className="input font-mono"
+                  placeholder="Enter account number"
+                />
+              </div>
+              <div>
+                <label className="label">IFSC Code *</label>
+                <input
+                  type="text"
+                  value={formData.ifscCode}
+                  onChange={(e) => setFormData({ ...formData, ifscCode: e.target.value.toUpperCase() })}
+                  className="input font-mono"
+                  placeholder="HDFC0001234"
+                  maxLength={11}
+                />
+              </div>
+              <div>
+                <label className="label">Account Holder Name *</label>
+                <input
+                  type="text"
+                  value={formData.beneficiaryName}
+                  onChange={(e) => setFormData({ ...formData, beneficiaryName: e.target.value })}
+                  className="input"
+                  placeholder="Name as per bank records"
+                />
+              </div>
+
+              <div className="p-3 bg-amber-50 rounded-lg text-sm text-amber-700">
+                <p>💡 Settlements will be credited to this account within T+2 business days</p>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="flex gap-3 p-6 border-t">
+          <button type="button" onClick={onClose} className="btn btn-secondary flex-1">
+            Cancel
+          </button>
+          {step === 1 && (
+            <button onClick={handleCreateAccount} disabled={isSubmitting} className="btn btn-primary flex-1">
+              {isSubmitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating...</> : <>Continue <ArrowRight className="w-4 h-4" /></>}
+            </button>
+          )}
+          {step === 2 && (
+            <button onClick={handleSubmitBank} disabled={isSubmitting} className="btn btn-primary flex-1">
+              {isSubmitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> : <>Submit Bank Details</>}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Razorpay Payments Modal
+function RazorpayPaymentsModal({ merchantId, onClose }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['razorpay-payments', merchantId],
+    queryFn: async () => {
+      const res = await api.get(`/merchants/${merchantId}/razorpay/payments`)
+      return res.data.data
+    }
+  })
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl max-w-3xl w-full max-h-[80vh] flex flex-col">
+        <div className="flex items-center justify-between p-6 border-b">
+          <h3 className="text-lg font-semibold">Payment History</h3>
+          <button onClick={onClose} className="p-2 hover:bg-surface-100 rounded-lg">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto p-6">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
+            </div>
+          ) : data?.payments?.length === 0 ? (
+            <div className="text-center py-12">
+              <History className="w-12 h-12 mx-auto text-surface-300 mb-3" />
+              <p className="text-surface-500">No payments yet</p>
+            </div>
+          ) : (
+            <>
+              {/* Summary */}
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className="p-4 bg-green-50 rounded-xl text-center">
+                  <p className="text-2xl font-bold text-green-600">₹{data?.summary?.totalCollected || 0}</p>
+                  <p className="text-xs text-green-700">Total Collected</p>
+                </div>
+                <div className="p-4 bg-blue-50 rounded-xl text-center">
+                  <p className="text-2xl font-bold text-blue-600">₹{data?.summary?.totalSettled || 0}</p>
+                  <p className="text-xs text-blue-700">Settled</p>
+                </div>
+                <div className="p-4 bg-purple-50 rounded-xl text-center">
+                  <p className="text-2xl font-bold text-purple-600">₹{data?.summary?.platformFees || 0}</p>
+                  <p className="text-xs text-purple-700">Platform Fees</p>
+                </div>
+              </div>
+
+              {/* Payments Table */}
+              <div className="border rounded-xl overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-surface-50">
+                    <tr>
+                      <th className="text-left p-3 font-medium">Order</th>
+                      <th className="text-left p-3 font-medium">Amount</th>
+                      <th className="text-left p-3 font-medium">Your Share</th>
+                      <th className="text-left p-3 font-medium">Status</th>
+                      <th className="text-left p-3 font-medium">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {data?.payments?.map((payment) => (
+                      <tr key={payment.orderNumber} className="hover:bg-surface-50">
+                        <td className="p-3 font-mono">#{payment.orderNumber}</td>
+                        <td className="p-3">₹{payment.amount}</td>
+                        <td className="p-3 text-green-600">₹{payment.merchantAmount}</td>
+                        <td className="p-3">
+                          <span className={clsx(
+                            'badge text-xs',
+                            payment.transferStatus === 'settled' ? 'badge-success' :
+                            payment.transferStatus === 'processed' ? 'badge-info' :
+                            'badge-warning'
+                          )}>
+                            {payment.transferStatus || 'pending'}
+                          </span>
+                        </td>
+                        <td className="p-3 text-surface-500">
+                          {new Date(payment.createdAt).toLocaleDateString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   )

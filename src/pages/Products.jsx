@@ -33,11 +33,13 @@ export default function Products() {
   // The effective merchant ID (user's own or selected)
   const effectiveMerchantId = isMerchantAdmin ? userMerchantId : selectedMerchant
 
-  const { data: merchants } = useQuery({
+  const { data: merchants = [] } = useQuery({
     queryKey: ['merchants'],
     queryFn: async () => {
       const res = await api.get('/merchants?limit=100&mode=all&includeInactive=true')
-      return res.data.data.merchants
+      // Handle different response structures
+      const data = res.data?.data || res.data
+      return Array.isArray(data?.merchants) ? data.merchants : Array.isArray(data) ? data : []
     },
     enabled: !isMerchantAdmin // Only fetch for admin users
   })

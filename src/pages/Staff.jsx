@@ -347,6 +347,7 @@ function StaffModal({ staff, roles, onClose }) {
     workingHoursStart: staff?.workingHours?.start || '',
     workingHoursEnd: staff?.workingHours?.end || ''
   })
+  const [planLimitError, setPlanLimitError] = useState(null)
 
   const saveMutation = useMutation({
     mutationFn: async (data) => {
@@ -372,7 +373,28 @@ function StaffModal({ staff, roles, onClose }) {
       toast.success(staff ? 'Staff updated' : 'Staff added')
       onClose()
     },
-    onError: (err) => toast.error(err.response?.data?.error?.message || 'Failed to save')
+    onError: (err) => {
+      const errorData = err.response?.data
+      
+      // Check for plan limit error (flat structure from planGating middleware)
+      if (errorData?.error === 'PLAN_LIMIT_REACHED') {
+        setPlanLimitError({
+          message: errorData.message || `You've reached your staff limit on the current plan`,
+          currentUsage: errorData.currentUsage,
+          limit: errorData.limit,
+          currentPlan: errorData.currentPlan,
+          suggestedPlan: errorData.suggestedPlan,
+          upgradeUrl: errorData.upgradeUrl || '/settings/billing'
+        })
+      } else {
+        // Toast is already shown by API interceptor for other errors
+        // Only show if no toast was shown (shouldn't happen, but fallback)
+        const message = errorData?.error?.message || errorData?.message || 'Failed to save'
+        if (!message) {
+          toast.error('Failed to save')
+        }
+      }
+    }
   })
 
   const handleSubmit = (e) => {
@@ -400,6 +422,43 @@ function StaffModal({ staff, roles, onClose }) {
           </div>
 
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            {/* Plan Limit Error */}
+            {planLimitError && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
+                    <AlertCircle className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-amber-800">Staff Limit Reached</h4>
+                    <p className="text-sm text-amber-700 mt-1">
+                      {planLimitError.message}
+                    </p>
+                    {planLimitError.currentUsage && planLimitError.limit && (
+                      <p className="text-xs text-amber-600 mt-1">
+                        Current: {planLimitError.currentUsage} / {planLimitError.limit} staff members
+                      </p>
+                    )}
+                    <div className="mt-3 flex gap-2">
+                      <a 
+                        href={planLimitError.upgradeUrl}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-600 text-white text-sm font-medium rounded-lg hover:bg-amber-700 transition-colors"
+                      >
+                        Upgrade to {planLimitError.suggestedPlan || 'Pro'}
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => setPlanLimitError(null)}
+                        className="px-3 py-1.5 text-amber-700 text-sm font-medium hover:bg-amber-100 rounded-lg transition-colors"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
                 <label className="label">Name *</label>

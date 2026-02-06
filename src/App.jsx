@@ -23,6 +23,9 @@ import DemoSettings from './pages/DemoSettings'
 import StaffOrders from './pages/StaffOrders'
 import StaffProfile from './pages/StaffProfile'
 import OrderFlowBuilder from './pages/OrderFlowBuilder'
+import RazorpayAdmin from './pages/RazorpayAdmin'
+import BillingAdmin from './pages/BillingAdmin'
+import MerchantProfile from './pages/MerchantProfile'
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
@@ -140,6 +143,9 @@ export default function App() {
           <Route path="geo-map" element={<GeoMap />} />
           <Route path="customers" element={<Customers />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="razorpay" element={<RazorpayAdmin />} />
+          <Route path="billing" element={<BillingAdmin />} />
+          <Route path="profile" element={<MerchantProfile />} />
           <Route path="how-it-works" element={<HowItWorks />} />
           <Route path="demo-settings" element={<DemoSettings />} />
         </Route>     

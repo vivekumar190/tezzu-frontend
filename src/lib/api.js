@@ -45,15 +45,20 @@ api.interceptors.response.use(
       const errorMsg = error.response.data.error.message
       // Ensure message is a string
       message = typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg)
+    } else if (error.response?.data?.message) {
+      // Handle flat error structure (e.g., plan limit errors)
+      message = error.response.data.message
     } else if (typeof error.message === 'string') {
       message = error.message
     }
     
-    // Don't show toast for auth check failures or network errors
+    // Don't show toast for auth check failures, network errors, or plan limit errors
+    // Plan limit errors should be handled by the component for better UX
     const isAuthCheck = error.config?.url === '/auth/me'
     const isNetworkError = !error.response
+    const isPlanLimitError = error.response?.data?.error === 'PLAN_LIMIT_REACHED'
     
-    if (!isAuthCheck && !isNetworkError) {
+    if (!isAuthCheck && !isNetworkError && !isPlanLimitError) {
       toast.error(message)
     }
 

@@ -19,7 +19,10 @@ import {
   CalendarClock,
   GitBranch,
   Volume2,
-  VolumeX
+  VolumeX,
+  CreditCard,
+  Receipt,
+  UserCircle
 } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { initSocket, disconnectSocket } from '../lib/socket'
@@ -35,11 +38,14 @@ const navigation = [
   { name: 'Products', href: '/products', icon: Package },
   { name: 'Customers', href: '/customers', icon: UsersRound },
   { name: 'Staff', href: '/staff-management', icon: Users, merchantOnly: true },
+  { name: 'Profile & Billing', href: '/profile', icon: UserCircle, merchantOnly: true },
   { name: 'Users', href: '/users', icon: Users, adminOnly: true },
   { name: 'Leads', href: '/leads', icon: UserPlus, adminOnly: true },
   { name: 'Demo Settings', href: '/demo-settings', icon: CalendarClock, adminOnly: true },
   { name: 'Live Chat', href: '/live-chat', icon: MessageCircle, adminOnly: true },
   { name: 'Geo Map', href: '/geo-map', icon: MapPin, adminOnly: true },
+  { name: 'Razorpay', href: '/razorpay', icon: CreditCard, adminOnly: true },
+  { name: 'Billing', href: '/billing', icon: Receipt, adminOnly: true },
   { name: 'Settings', href: '/settings', icon: Settings, adminOnly: true },
   { name: 'How It Works', href: '/how-it-works', icon: BookOpen, adminOnly: true },
 ]
