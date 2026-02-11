@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { 
   Store, 
@@ -35,7 +35,10 @@ const fallbackChartData = [
 
 export default function Dashboard() {
   const { user } = useAuthStore()
-  const [liveOrders, setLiveOrders] = useState([])
+  const queryClient = useQueryClient()
+  // Ephemeral toast notifications for newly arrived orders (auto-dismiss)
+  const [orderToasts, setOrderToasts] = useState([])
+  const toastTimersRef = useRef({})
 
   const { data: dashboardData, isLoading, isError, refetch } = useQuery({
     queryKey: ['dashboard'],
@@ -49,6 +52,28 @@ export default function Dashboard() {
     refetchOnWindowFocus: true,
     retry: 2,
   })
+
+  // Show a brief toast when a new order arrives, auto-dismiss after 8s
+  const showOrderToast = useCallback((order) => {
+    if (!order?._id) return
+    setOrderToasts(prev => {
+      // Avoid duplicates
+      if (prev.some(o => o._id === order._id)) return prev
+      return [order, ...prev].slice(0, 5)
+    })
+    // Auto-dismiss after 8 seconds
+    toastTimersRef.current[order._id] = setTimeout(() => {
+      setOrderToasts(prev => prev.filter(o => o._id !== order._id))
+      delete toastTimersRef.current[order._id]
+    }, 8000)
+  }, [])
+
+  // Cleanup toast timers on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(toastTimersRef.current).forEach(clearTimeout)
+    }
+  }, [])
 
   // Live activity - refresh every 30 seconds
   const { data: liveActivity } = useQuery({
@@ -75,27 +100,39 @@ export default function Dashboard() {
     try {
       const socket = getSocket()
       
-      if (socket) {
-        socket.on('order:created', (order) => {
-          if (order?._id) {
-            setLiveOrders(prev => [order, ...prev].slice(0, 5))
-          }
-        })
+      if (!socket) return
 
-        // Join merchant room if merchant admin
-        if (user?.merchant) {
-          const merchantId = typeof user.merchant === 'object' 
-            ? user.merchant._id 
-            : user.merchant
-          if (merchantId) {
-            joinMerchantRoom(merchantId)
-          }
+      const handleOrderCreated = (order) => {
+        // 1. Invalidate dashboard query so recentOrders & stats refetch from API (DB-backed)
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+        // 2. Show an ephemeral toast notification (cosmetic only, not source of truth)
+        showOrderToast(order)
+      }
+
+      const handleReconnect = () => {
+        // Catch up on anything missed during disconnection
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+        queryClient.invalidateQueries({ queryKey: ['live-activity'] })
+        queryClient.invalidateQueries({ queryKey: ['customer-stats-dashboard'] })
+      }
+
+      socket.on('order:created', handleOrderCreated)
+      socket.on('connect', handleReconnect)
+
+      // Join merchant room if merchant admin
+      if (user?.merchant) {
+        const merchantId = typeof user.merchant === 'object' 
+          ? user.merchant._id 
+          : user.merchant
+        if (merchantId) {
+          joinMerchantRoom(merchantId)
         }
       }
 
       return () => {
         try {
-          socket?.off('order:created')
+          socket.off('order:created', handleOrderCreated)
+          socket.off('connect', handleReconnect)
         } catch (e) {
           // Ignore cleanup errors
         }
@@ -103,7 +140,7 @@ export default function Dashboard() {
     } catch (e) {
       console.error('Socket error in Dashboard:', e)
     }
-  }, [user])
+  }, [user, queryClient, showOrderToast])
 
   const stats = [
     {
@@ -466,10 +503,10 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Live Orders Ticker */}
-      {liveOrders.length > 0 && (
+      {/* Live Orders Toast — ephemeral notifications, auto-dismiss after 8s */}
+      {orderToasts.length > 0 && (
         <div className="fixed bottom-6 right-6 z-50 space-y-2">
-          {liveOrders.map((order) => (
+          {orderToasts.map((order) => (
             <div 
               key={order._id}
               className="card p-4 animate-slide-in shadow-lg border-l-4 border-l-primary-500"
