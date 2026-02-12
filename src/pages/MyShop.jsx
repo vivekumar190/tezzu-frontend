@@ -2081,7 +2081,7 @@ function PaymentSettings({ merchant, merchantId }) {
 
           {/* Save Button */}
           <div className="flex justify-end">
-            <button onClick={handleSave} disabled={isSaving} className="btn btn-primary">
+            <button onClick={() => handleSave()} disabled={isSaving} className="btn btn-primary">
               {isSaving ? <><RefreshCw className="w-4 h-4 animate-spin" /> Saving...</> : <><Save className="w-4 h-4" /> Save QR Settings</>}
             </button>
           </div>
