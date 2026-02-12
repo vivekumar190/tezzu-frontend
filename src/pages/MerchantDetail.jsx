@@ -821,7 +821,8 @@ function StandaloneSettings({ merchant, merchantId }) {
     phoneNumberId: merchant?.whatsappConfig?.phoneNumberId || '',
     accessToken: merchant?.whatsappConfig?.accessToken || '',
     verifyToken: merchant?.whatsappConfig?.verifyToken || '',
-    businessAccountId: merchant?.whatsappConfig?.businessAccountId || ''
+    businessAccountId: merchant?.whatsappConfig?.businessAccountId || '',
+    metaBusinessId: merchant?.whatsappConfig?.metaBusinessId || ''
   })
   const [isVerifying, setIsVerifying] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -881,8 +882,28 @@ function StandaloneSettings({ merchant, merchantId }) {
     setIsVerifying(true)
     try {
       const res = await api.post(`/merchants/${merchantId}/verify-whatsapp`)
-      toast.success(`Connected! Phone: ${res.data.data.phoneNumber}`)
+      const data = res.data.data
+      const steps = data.setupSteps || []
+      const successCount = steps.filter(s => s.status === 'success').length
+      const failedSteps = steps.filter(s => s.status === 'failed')
+      
+      if (failedSteps.length > 0) {
+        toast.success(`Connected! ${successCount}/${steps.length} steps OK. Some steps need attention.`, { duration: 5000 })
+        failedSteps.forEach(s => toast.error(`${s.step}: ${s.detail}`, { duration: 8000 }))
+      } else {
+        toast.success(`Fully connected! Phone: ${data.phoneNumber} (${successCount} steps completed)`, { duration: 5000 })
+      }
+      
+      // Auto-fill config from detected values
+      if (data.wabaId && !config.businessAccountId) {
+        setConfig(prev => ({ ...prev, businessAccountId: data.wabaId }))
+      }
+      if (data.metaBusinessId && !config.metaBusinessId) {
+        setConfig(prev => ({ ...prev, metaBusinessId: data.metaBusinessId }))
+      }
+      
       refetchStatus()
+      refetchCatalog()
       queryClient.invalidateQueries(['merchant', merchantId])
     } catch (error) {
       toast.error(error.response?.data?.error?.message || 'Verification failed')
@@ -1153,7 +1174,7 @@ function StandaloneSettings({ merchant, merchantId }) {
 
               <div>
                 <label className="label">
-                  Business Account ID
+                  WhatsApp Business Account ID (WABA)
                   <span className="text-surface-400 font-normal ml-1">(optional)</span>
                 </label>
                 <input
@@ -1161,8 +1182,29 @@ function StandaloneSettings({ merchant, merchantId }) {
                   value={config.businessAccountId}
                   onChange={(e) => setConfig({ ...config, businessAccountId: e.target.value })}
                   className="input font-mono"
-                  placeholder="Only needed for catalog features"
+                  placeholder="WABA ID for messaging"
                 />
+                <p className="text-xs text-surface-400 mt-1">
+                  WhatsApp Business Account ID — used for messaging APIs
+                </p>
+              </div>
+
+              <div>
+                <label className="label">
+                  Meta Business Manager ID
+                  <span className="text-amber-500 font-normal ml-1">(required for catalog)</span>
+                </label>
+                <input
+                  type="text"
+                  value={config.metaBusinessId}
+                  onChange={(e) => setConfig({ ...config, metaBusinessId: e.target.value })}
+                  className="input font-mono"
+                  placeholder="e.g. 806822202369208"
+                />
+                <p className="text-xs text-surface-400 mt-1">
+                  Find it: business.facebook.com → Settings → Business Info → Business ID.
+                  <span className="text-amber-600 font-medium"> This is NOT the WABA ID.</span>
+                </p>
               </div>
 
               <div>

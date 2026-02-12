@@ -35,6 +35,7 @@ const navigation = [
   { name: 'Merchants', href: '/merchants', icon: Store, adminOnly: true },
   { name: 'Orders', href: '/orders', icon: ShoppingBag },
   { name: 'Order Flow', href: '/order-flow', icon: GitBranch, merchantOnly: true },
+  { name: 'Chat Flow', href: '/chat-flow', icon: MessageCircle, merchantOnly: true },
   { name: 'Products', href: '/products', icon: Package },
   { name: 'Customers', href: '/customers', icon: UsersRound },
   { name: 'Staff', href: '/staff-management', icon: Users, merchantOnly: true },

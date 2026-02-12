@@ -23,6 +23,7 @@ import DemoSettings from './pages/DemoSettings'
 import StaffOrders from './pages/StaffOrders'
 import StaffProfile from './pages/StaffProfile'
 import OrderFlowBuilder from './pages/OrderFlowBuilder'
+import ChatFlowBuilder from './pages/ChatFlowBuilder'
 import RazorpayAdmin from './pages/RazorpayAdmin'
 import BillingAdmin from './pages/BillingAdmin'
 import MerchantProfile from './pages/MerchantProfile'
@@ -137,6 +138,7 @@ export default function App() {
           <Route path="products" element={<Products />} />
           <Route path="staff-management" element={<Staff />} />
           <Route path="order-flow" element={<OrderFlowBuilder />} />
+          <Route path="chat-flow" element={<ChatFlowBuilder />} />
           <Route path="users" element={<Users />} />
           <Route path="leads" element={<Leads />} />
           <Route path="live-chat" element={<LiveChat />} />
