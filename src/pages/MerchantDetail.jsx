@@ -886,13 +886,16 @@ function StandaloneSettings({ merchant, merchantId }) {
       const steps = data.setupSteps || []
       const successCount = steps.filter(s => s.status === 'success').length
       const failedSteps = steps.filter(s => s.status === 'failed')
+      const skippedSteps = steps.filter(s => s.status === 'skipped')
       
       if (failedSteps.length > 0) {
-        toast.success(`Connected! ${successCount}/${steps.length} steps OK. Some steps need attention.`, { duration: 5000 })
+        toast.success(`Connected! ${successCount}/${steps.length} steps OK.`, { duration: 5000 })
         failedSteps.forEach(s => toast.error(`${s.step}: ${s.detail}`, { duration: 8000 }))
       } else {
-        toast.success(`Fully connected! Phone: ${data.phoneNumber} (${successCount} steps completed)`, { duration: 5000 })
+        toast.success(`Fully connected! Phone: ${data.phoneNumber}`, { duration: 5000 })
       }
+      // Show skipped steps as info, not errors
+      skippedSteps.forEach(s => toast(`${s.detail}`, { icon: 'ℹ️', duration: 5000 }))
       
       // Auto-fill config from detected values
       if (data.wabaId && !config.businessAccountId) {
