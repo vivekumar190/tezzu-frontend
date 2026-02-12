@@ -1945,7 +1945,9 @@ function PaymentSettings({ merchant, merchantId }) {
       }
       toast.success('Payment settings saved!')
     } catch (error) {
-      toast.error('Failed to save payment settings')
+      const msg = error.response?.data?.error?.message || error.response?.data?.error || error.message || 'Unknown error'
+      console.error('Payment settings save error:', error.response?.data || error)
+      toast.error(`Failed to save payment settings: ${msg}`)
     } finally {
       setIsSaving(false)
     }
