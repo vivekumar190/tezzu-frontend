@@ -744,12 +744,16 @@ function OrderDetails({ order, onUpdateStatus, onAssignDelivery }) {
         </div>
 
         {/* Delivery Address */}
-        {order.deliveryAddress && (
+        {(order.deliveryAddress?.street || order.deliveryAddress?.city) && (
           <div>
             <h4 className="text-sm font-medium text-surface-500 mb-3">Delivery Address</h4>
             <div className="flex items-start gap-2">
               <MapPin className="w-4 h-4 text-surface-400 mt-0.5" />
-              <p className="text-surface-700">{order.deliveryAddress.street}</p>
+              <div>
+                <p className="text-surface-700">{order.deliveryAddress.street || 'N/A'}</p>
+                {order.deliveryAddress.landmark && <p className="text-surface-500 text-sm">{order.deliveryAddress.landmark}</p>}
+                {order.deliveryAddress.city && <p className="text-surface-500 text-sm">{order.deliveryAddress.city} {order.deliveryAddress.pincode}</p>}
+              </div>
             </div>
           </div>
         )}
