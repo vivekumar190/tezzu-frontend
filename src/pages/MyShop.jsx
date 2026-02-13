@@ -1176,7 +1176,6 @@ function EditShopModal({ merchant, onClose, onSuccess }) {
       await api.put(`/merchants/${merchant._id}`, {
         name: formData.name,
         description: formData.description,
-        whatsappNumber: formData.whatsappNumber,
         email: formData.email,
         address: {
           street: formData.street,
@@ -1237,9 +1236,10 @@ function EditShopModal({ merchant, onClose, onSuccess }) {
               <input
                 type="text"
                 value={formData.whatsappNumber}
-                onChange={(e) => setFormData({ ...formData, whatsappNumber: e.target.value })}
-                className="input"
+                disabled
+                className="input bg-surface-100 text-surface-500 cursor-not-allowed"
               />
+              <p className="text-xs text-surface-400 mt-1">Contact admin to change WhatsApp number</p>
             </div>
 
             <div>
