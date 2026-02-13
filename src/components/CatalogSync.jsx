@@ -25,7 +25,9 @@ import { useAuthStore } from '../store/authStore';
 function CatalogSetupPanel({ onSetupComplete }) {
   const [showCreate, setShowCreate] = useState(false);
   const [showManualEntry, setShowManualEntry] = useState(false);
-  const [catalogName, setCatalogName] = useState('Tezzu Food Catalog');
+  const { user } = useAuthStore();
+  const defaultName = user?.merchant?.name ? `${user.merchant.name} Catalog` : 'Product Catalog';
+  const [catalogName, setCatalogName] = useState(defaultName);
   const [selectedCatalogId, setSelectedCatalogId] = useState('');
   const [manualCatalogId, setManualCatalogId] = useState('');
   const queryClient = useQueryClient();
@@ -375,7 +377,7 @@ function CatalogStatusCard({ status, onRefresh, isAdmin }) {
 }
 
 // Sync Status for Merchant
-function MerchantSyncStatus({ merchantId, merchantName }) {
+function MerchantSyncStatus({ merchantId, merchantName, hasMerchantCatalog }) {
   const queryClient = useQueryClient();
 
   const { data: syncStatus, isLoading } = useQuery({
@@ -389,12 +391,21 @@ function MerchantSyncStatus({ merchantId, merchantName }) {
 
   const syncMutation = useMutation({
     mutationFn: async () => {
-      const res = await api.post(`/catalog/sync/${merchantId}`);
+      // Use merchant-specific catalog sync if merchant has its own catalog, else global sync
+      const endpoint = hasMerchantCatalog 
+        ? `/catalog/sync-merchant-catalog/${merchantId}`
+        : `/catalog/sync/${merchantId}`;
+      const res = await api.post(endpoint);
       return res.data;
     },
     onSuccess: (data) => {
-      toast.success(`Synced ${data.data.synced} products to catalog`);
+      const synced = data.data.synced || 0;
+      const collections = data.data.collections || 0;
+      let msg = `Synced ${synced} products to catalog`;
+      if (collections > 0) msg += ` with ${collections} categories`;
+      toast.success(msg);
       queryClient.invalidateQueries(['catalog-sync-status', merchantId]);
+      queryClient.invalidateQueries(['catalog-status', merchantId]);
       queryClient.invalidateQueries(['products']);
     },
     onError: (error) => {
@@ -548,6 +559,7 @@ function AllMerchantsSyncPanel() {
               key={merchant._id} 
               merchantId={merchant._id}
               merchantName={merchant.name}
+              hasMerchantCatalog={!!merchant.catalog?.catalogId}
             />
           ))}
         </div>
@@ -563,9 +575,10 @@ export default function CatalogSync({ merchantId, merchantName, compact = false 
   const queryClient = useQueryClient();
 
   const { data: catalogStatus, refetch: refetchStatus } = useQuery({
-    queryKey: ['catalog-status'],
+    queryKey: ['catalog-status', merchantId],
     queryFn: async () => {
-      const res = await api.get('/catalog/status');
+      const params = merchantId ? `?merchantId=${merchantId}` : '';
+      const res = await api.get(`/catalog/status${params}`);
       return res.data.data;
     }
   });
@@ -586,6 +599,7 @@ export default function CatalogSync({ merchantId, merchantName, compact = false 
                 <MerchantSyncStatus 
                   merchantId={merchantId} 
                   merchantName={merchantName}
+                  hasMerchantCatalog={!!catalogStatus?.catalogId}
                 />
               </div>
             )}
@@ -623,6 +637,7 @@ export default function CatalogSync({ merchantId, merchantName, compact = false 
                   <MerchantSyncStatus 
                     merchantId={merchantId} 
                     merchantName={merchantName}
+                    hasMerchantCatalog={!!catalogStatus?.catalogId}
                   />
                 )
               )}
