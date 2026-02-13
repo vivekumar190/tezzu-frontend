@@ -63,11 +63,18 @@ const DEFAULT_STEP_CONFIGS = {
     displayMode: 'categories',
     headerMessage: '',
     showPrices: true,
+    catalogBrowseMessage: '🛍️ Browse our full menu at *{{merchantName}}*!\n\nTap below to view all products and add to cart.',
+    addedToCartMessage: '✅ Added *{{quantity}}x {{productName}}* to cart!',
+    quantityPrompt: '📦 How many *{{productName}}* would you like to add?\n\nTap a button or type a number (1-10):',
   },
   cart: {
     emptyCartMessage: '🛒 Your cart is empty!\n\nBrowse the menu to add items first.',
     showContinueShopping: true,
     showClearCart: true,
+    clearConfirmMessage: '🗑️ *Clear your cart?*\n\nYou have {{cartCount}} item(s) worth ₹{{cartTotal}}.\n\nThis will remove all items. Continue?',
+    cartClearedMessage: '🗑️ Cart cleared! Ready to start fresh!',
+    minOrderMessage: '⚠️ Minimum order amount is ₹{{minOrder}}\n\nPlease add ₹{{difference}} more to proceed.',
+    returnCartMessage: '👋 Welcome back{{customerGreeting}}!\n\nYou have *{{cartCount}} item(s)* in your cart\n💵 Total: *₹{{cartTotal}}*\n\nWhat would you like to do?',
   },
   checkout: {
     addressPrompt: '📍 *Where should we deliver?*\n\nPlease type your complete address:',
@@ -83,10 +90,15 @@ const DEFAULT_STEP_CONFIGS = {
     enableCOD: null,
     enableUPI: null,
     enableRazorpay: null,
+    waitingForPaymentMessage: '📸 Please send a screenshot of your payment.\n\nOr tap the button below to switch to Cash on Delivery.',
+    paymentReceivedMessage: '✅ *Payment Screenshot Received!*\n\nYour order is being processed.\nThe restaurant will verify your payment and confirm your order shortly.',
   },
   confirmation: {
     confirmationMessage: "We're notifying the restaurant.\nYou'll get updates on your order! 📱",
     thankYouMessage: '_Thank you for ordering with {{merchantName}}!_ 🙏',
+    orderCancelledMessage: '❌ Order cancelled.',
+    outsideHoursMessage: '🕐 *{{merchantName}}* is currently closed.\n\nOur hours: *{{openTime}} – {{closeTime}}*\n\nYou can still browse our menu. We\'ll accept orders when we\'re back! 🙏',
+    goodbyeMessage: '👋 No problem! Type *hi* when you want to order again.',
   },
 }
 
@@ -255,7 +267,9 @@ export default function ChatFlowBuilder() {
       if (cfg.showMinOrder) text += '\n\n🛒 Min. Order: ₹200'
       if (cfg.showDeliveryCharge) text += '\n🚚 Delivery: ₹30'
       if (cfg.showEstTime) text += '\n⏱️ Est. Time: 30 mins'
-      messages.push({ from: 'bot', text, buttons: ['📋 View Menu', '📍 Share Location'] })
+      const welcomeButtons = ['📋 View Menu']
+      if (savedData?.useLocationBasedOrdering) welcomeButtons.push('📍 Share Location')
+      messages.push({ from: 'bot', text, buttons: welcomeButtons })
     }
     if (customMessages.afterWelcome) {
       messages.push({ from: 'bot', text: customMessages.afterWelcome.replace('{{merchantName}}', savedData?.merchantName || 'Your Store') })
@@ -377,6 +391,8 @@ export default function ChatFlowBuilder() {
             {steps.map((step, index) => {
               const stepDef = CHAT_STEPS.find(s => s.id === step.stepId)
               if (!stepDef) return null
+              // Only show location step if location-based ordering is enabled in merchant settings
+              if (step.stepId === 'location' && !savedData?.useLocationBasedOrdering) return null
               const Icon = stepDef.icon
               const isExpanded = expandedStep === step.stepId
 
@@ -694,6 +710,9 @@ function MenuConfig({ config, onUpdate }) {
         </div>
       </div>
       <TextFieldWithCount label="Custom Header Message" value={config.headerMessage} onChange={(v) => onUpdate({ headerMessage: v })} placeholder="Optional message shown above the menu" maxLength={500} hint="Leave empty for default" />
+      <TextFieldWithCount label="Catalog Browse Message" value={config.catalogBrowseMessage} onChange={(v) => onUpdate({ catalogBrowseMessage: v })} placeholder="🛍️ Browse our full menu at *{{merchantName}}*!" maxLength={500} rows={2} hint="Shown when using catalog mode. Use {{merchantName}}" />
+      <TextFieldWithCount label="Added to Cart Message" value={config.addedToCartMessage} onChange={(v) => onUpdate({ addedToCartMessage: v })} placeholder="✅ Added *{{quantity}}x {{productName}}* to cart!" maxLength={200} hint="Use {{quantity}}, {{productName}}" />
+      <TextFieldWithCount label="Quantity Prompt" value={config.quantityPrompt} onChange={(v) => onUpdate({ quantityPrompt: v })} placeholder="📦 How many *{{productName}}*?" maxLength={300} hint="Use {{productName}}" />
       <CheckboxField label="Show Prices" checked={config.showPrices} onChange={(v) => onUpdate({ showPrices: v })} hint="Display prices next to product names" />
     </div>
   )
@@ -704,6 +723,10 @@ function CartConfig({ config, onUpdate }) {
   return (
     <div className="space-y-3">
       <TextFieldWithCount label="Empty Cart Message" value={config.emptyCartMessage} onChange={(v) => onUpdate({ emptyCartMessage: v })} maxLength={1024} rows={2} />
+      <TextFieldWithCount label="Returning Customer Cart Message" value={config.returnCartMessage} onChange={(v) => onUpdate({ returnCartMessage: v })} placeholder="👋 Welcome back{{customerGreeting}}!" maxLength={500} rows={2} hint="Shown when customer returns with items in cart. Use {{customerGreeting}}, {{cartCount}}, {{cartTotal}}" />
+      <TextFieldWithCount label="Clear Cart Confirm" value={config.clearConfirmMessage} onChange={(v) => onUpdate({ clearConfirmMessage: v })} placeholder="🗑️ *Clear your cart?*" maxLength={500} rows={2} hint="Use {{cartCount}}, {{cartTotal}}" />
+      <TextFieldWithCount label="Cart Cleared Message" value={config.cartClearedMessage} onChange={(v) => onUpdate({ cartClearedMessage: v })} placeholder="🗑️ Cart cleared!" maxLength={200} />
+      <TextFieldWithCount label="Min Order Warning" value={config.minOrderMessage} onChange={(v) => onUpdate({ minOrderMessage: v })} placeholder="⚠️ Min order is ₹{{minOrder}}" maxLength={300} hint="Use {{minOrder}}, {{difference}}" />
       <div className="flex flex-wrap gap-4">
         <CheckboxField label="Show 'Continue Shopping' button" checked={config.showContinueShopping} onChange={(v) => onUpdate({ showContinueShopping: v })} />
         <CheckboxField label="Show 'Clear Cart' button" checked={config.showClearCart} onChange={(v) => onUpdate({ showClearCart: v })} />
@@ -741,6 +764,8 @@ function PaymentConfig({ config, onUpdate }) {
   return (
     <div className="space-y-3">
       <TextFieldWithCount label="Payment Header Message" value={config.headerMessage} onChange={(v) => onUpdate({ headerMessage: v })} maxLength={1024} rows={2} hint="Use {{grandTotal}} for order total" />
+      <TextFieldWithCount label="Waiting for Payment Message" value={config.waitingForPaymentMessage} onChange={(v) => onUpdate({ waitingForPaymentMessage: v })} placeholder="📸 Please send a screenshot of your payment." maxLength={500} rows={2} hint="Shown while waiting for payment screenshot" />
+      <TextFieldWithCount label="Payment Received Message" value={config.paymentReceivedMessage} onChange={(v) => onUpdate({ paymentReceivedMessage: v })} placeholder="✅ *Payment Screenshot Received!*" maxLength={500} rows={2} hint="Shown after screenshot is uploaded" />
       <div className="space-y-2">
         <label className="text-xs font-medium text-surface-600">Payment Methods</label>
         <p className="text-xs text-surface-400">Set to override merchant defaults, or leave as "Auto" to inherit from shop settings.</p>
@@ -776,6 +801,9 @@ function ConfirmationConfig({ config, onUpdate }) {
     <div className="space-y-3">
       <TextFieldWithCount label="Confirmation Message" value={config.confirmationMessage} onChange={(v) => onUpdate({ confirmationMessage: v })} maxLength={1024} rows={2} hint="Shown after order is placed" />
       <TextFieldWithCount label="Thank You Message" value={config.thankYouMessage} onChange={(v) => onUpdate({ thankYouMessage: v })} maxLength={500} hint="Closing line. Use {{merchantName}}" />
+      <TextFieldWithCount label="Order Cancelled Message" value={config.orderCancelledMessage} onChange={(v) => onUpdate({ orderCancelledMessage: v })} placeholder="❌ Order cancelled." maxLength={300} />
+      <TextFieldWithCount label="Outside Hours Message" value={config.outsideHoursMessage} onChange={(v) => onUpdate({ outsideHoursMessage: v })} placeholder="🕐 *{{merchantName}}* is currently closed." maxLength={500} rows={2} hint="Use {{merchantName}}, {{openTime}}, {{closeTime}}" />
+      <TextFieldWithCount label="Goodbye Message" value={config.goodbyeMessage} onChange={(v) => onUpdate({ goodbyeMessage: v })} placeholder="👋 No problem! Type *hi* when you want to order again." maxLength={300} hint="Shown when customer cancels with empty cart" />
     </div>
   )
 }
