@@ -164,26 +164,15 @@ export default function Login() {
               </button>
             </form>
 
-            {/* Register as Merchant */}
-            <div className="mt-6 pt-6 border-t border-surface-100 text-center space-y-3">
-              <div>
-                <p className="text-sm text-surface-500 mb-1">Want to sell on WhatsApp?</p>
-                <a 
-                  href="/register" 
-                  className="text-emerald-600 hover:text-emerald-700 font-semibold text-sm"
-                >
-                  Register your business →
-                </a>
-              </div>
-              <div>
-                <p className="text-sm text-surface-500 mb-1">Are you a staff member?</p>
-                <a 
-                  href="/staff/login" 
-                  className="text-primary-600 hover:text-primary-700 font-medium text-sm"
-                >
-                  Login to Staff Portal →
-                </a>
-              </div>
+            {/* Staff login link */}
+            <div className="mt-6 pt-6 border-t border-surface-100 text-center">
+              <p className="text-sm text-surface-500 mb-1">Are you a staff member?</p>
+              <a 
+                href="/staff/login" 
+                className="text-primary-600 hover:text-primary-700 font-medium text-sm"
+              >
+                Login to Staff Portal →
+              </a>
             </div>
           </div>
         </div>
