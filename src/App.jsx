@@ -30,6 +30,7 @@ import MerchantProfile from './pages/MerchantProfile'
 import Wallet from './pages/Wallet'
 import Campaigns from './pages/Campaigns'
 import CampaignTemplates from './pages/CampaignTemplates'
+import MerchantRegister from './pages/MerchantRegister'
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
@@ -114,6 +115,9 @@ export default function App() {
       <Routes>
         {/* Admin/Merchant Login */}
         <Route path="/login" element={<Login />} />
+        
+        {/* Merchant Self-Registration */}
+        <Route path="/register" element={<MerchantRegister />} />
         
         {/* Staff Portal Routes */}
         <Route path="/staff/login" element={<StaffLogin />} />

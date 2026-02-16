@@ -41,6 +41,7 @@ import {
 import toast from 'react-hot-toast'
 import api from '../lib/api'
 import clsx from 'clsx'
+import WhatsAppEmbeddedSignup from '../components/WhatsAppEmbeddedSignup'
 
 export default function MerchantDetail() {
   const { id } = useParams()
@@ -817,6 +818,7 @@ function ProductModal({ merchantId, categories, product, onClose }) {
 // ========================================
 function StandaloneSettings({ merchant, merchantId }) {
   const [isStandalone, setIsStandalone] = useState(merchant?.isStandalone || false)
+  const [showManualConfig, setShowManualConfig] = useState(false)
   const [config, setConfig] = useState({
     phoneNumberId: merchant?.whatsappConfig?.phoneNumberId || '',
     accessToken: merchant?.whatsappConfig?.accessToken || '',
@@ -1028,24 +1030,14 @@ function StandaloneSettings({ merchant, merchantId }) {
                   </p>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
-                    <div className="flex items-start gap-2">
-                      <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                      <div className="text-sm text-amber-800">
-                        <p className="font-medium">Not Connected</p>
-                        <p className="mt-1">
-                          Enter your WhatsApp Business API credentials below and click "Verify Connection"
-                        </p>
-                        {whatsappStatus?.whatsappConfig?.verificationError && (
-                          <p className="mt-2 text-red-600">
-                            Error: {whatsappStatus.whatsappConfig.verificationError}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <WhatsAppEmbeddedSignup
+                  merchantId={merchantId}
+                  onSuccess={() => {
+                    refetchStatus()
+                    refetchCatalog()
+                    queryClient.invalidateQueries(['merchant', merchantId])
+                  }}
+                />
               )}
             </div>
 
@@ -1153,13 +1145,28 @@ function StandaloneSettings({ merchant, merchantId }) {
             </div>
           </div>
 
-          {/* WhatsApp Configuration */}
+          {/* Manual WhatsApp Configuration (Advanced) */}
           <div className="card p-6">
-            <h4 className="font-semibold text-surface-900 mb-4 flex items-center gap-2">
-              <Key className="w-5 h-5 text-primary-500" />
-              WhatsApp Phone Configuration
-            </h4>
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="font-semibold text-surface-900 flex items-center gap-2">
+                <Key className="w-5 h-5 text-primary-500" />
+                Manual Configuration
+                <span className="text-xs font-normal text-surface-400">(Advanced)</span>
+              </h4>
+              <button
+                onClick={() => setShowManualConfig(!showManualConfig)}
+                className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+              >
+                {showManualConfig ? 'Hide' : 'Show'}
+              </button>
+            </div>
 
+            {!showManualConfig ? (
+              <p className="text-sm text-surface-500">
+                Use the "Connect with Facebook" button above for automatic setup.
+                Click "Show" if you need to enter credentials manually.
+              </p>
+            ) : (
             <div className="grid lg:grid-cols-2 gap-4">
               <div className="lg:col-span-2">
                 <label className="label">Phone Number ID *</label>
@@ -1265,6 +1272,7 @@ function StandaloneSettings({ merchant, merchantId }) {
                 )}
               </button>
             </div>
+            )}
           </div>
 
           {/* Setup Instructions */}
