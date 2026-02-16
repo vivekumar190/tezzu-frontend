@@ -22,7 +22,10 @@ import {
   VolumeX,
   CreditCard,
   Receipt,
-  UserCircle
+  UserCircle,
+  Wallet,
+  Megaphone,
+  FileText
 } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { initSocket, disconnectSocket } from '../lib/socket'
@@ -39,6 +42,8 @@ const navigation = [
   { name: 'Products', href: '/products', icon: Package },
   { name: 'Customers', href: '/customers', icon: UsersRound },
   { name: 'Staff', href: '/staff-management', icon: Users, merchantOnly: true },
+  { name: 'Wallet', href: '/wallet', icon: Wallet, merchantOnly: true },
+  { name: 'Campaigns', href: '/campaigns', icon: Megaphone, merchantOnly: true },
   { name: 'Profile & Billing', href: '/profile', icon: UserCircle, merchantOnly: true },
   { name: 'Users', href: '/users', icon: Users, adminOnly: true },
   { name: 'Leads', href: '/leads', icon: UserPlus, adminOnly: true },
@@ -47,6 +52,7 @@ const navigation = [
   { name: 'Geo Map', href: '/geo-map', icon: MapPin, adminOnly: true },
   { name: 'Razorpay', href: '/razorpay', icon: CreditCard, adminOnly: true },
   { name: 'Billing', href: '/billing', icon: Receipt, adminOnly: true },
+  { name: 'Templates', href: '/campaign-templates', icon: FileText, adminOnly: true },
   { name: 'Settings', href: '/settings', icon: Settings, adminOnly: true },
   { name: 'How It Works', href: '/how-it-works', icon: BookOpen, adminOnly: true },
 ]

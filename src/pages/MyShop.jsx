@@ -43,7 +43,12 @@ import {
   Loader2,
   Banknote,
   Wallet,
-  History
+  History,
+  QrCode,
+  Download,
+  Copy,
+  Globe,
+  Link
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
@@ -449,6 +454,7 @@ export default function MyShop() {
         <nav className="flex gap-8 overflow-x-auto">
           {[
             { id: 'menu', label: 'Menu & Products', icon: Package },
+            { id: 'storefront', label: 'Storefront & QR', icon: QrCode },
             { id: 'location', label: 'Location & Zones', icon: MapPin },
             { id: 'settings', label: 'Settings', icon: Settings },
           ].map((tab) => (
@@ -651,6 +657,10 @@ export default function MyShop() {
             </div>
           )}
         </div>
+      )}
+
+      {activeTab === 'storefront' && (
+        <StorefrontSettings merchantId={merchantId} merchant={merchant} />
       )}
 
       {activeTab === 'location' && (
@@ -2662,6 +2672,237 @@ function RazorpayKycModal({ merchantId, merchant, existingData, onClose, onSucce
 }
 
 // Razorpay Payments Modal
+function StorefrontSettings({ merchantId, merchant }) {
+  const [qrLoading, setQrLoading] = useState(false)
+  const [qrData, setQrData] = useState(null)
+  const [domainInput, setDomainInput] = useState('')
+  const [domainStatus, setDomainStatus] = useState(null)
+  const [domainLoading, setDomainLoading] = useState(false)
+
+  const storefrontUrl = `https://tezzu.in/@${merchant?.keyword || ''}`
+
+  const fetchQR = async (regenerate = false) => {
+    setQrLoading(true)
+    try {
+      const res = await api.get(`/merchants/${merchantId}/storefront-qr`, { params: regenerate ? { regenerate: true } : {} })
+      setQrData(res.data.data)
+    } catch (err) {
+      toast.error('Failed to generate QR code')
+    } finally {
+      setQrLoading(false)
+    }
+  }
+
+  const fetchDomainStatus = async () => {
+    try {
+      const res = await api.get(`/merchants/${merchantId}/custom-domain/status`)
+      setDomainStatus(res.data.data)
+    } catch {
+      // No domain configured
+    }
+  }
+
+  useEffect(() => {
+    if (merchantId) {
+      fetchQR()
+      fetchDomainStatus()
+    }
+  }, [merchantId])
+
+  const handleSetDomain = async () => {
+    if (!domainInput.trim()) return
+    setDomainLoading(true)
+    try {
+      const res = await api.post(`/merchants/${merchantId}/custom-domain`, { domain: domainInput })
+      setDomainStatus(res.data.data)
+      toast.success('Domain configured! Follow the DNS instructions below.')
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to set domain')
+    } finally {
+      setDomainLoading(false)
+    }
+  }
+
+  const handleVerifyDomain = async () => {
+    setDomainLoading(true)
+    try {
+      const res = await api.post(`/merchants/${merchantId}/custom-domain/verify`)
+      setDomainStatus(res.data.data)
+      if (res.data.data.verified) {
+        toast.success('Domain verified and active!')
+      } else {
+        toast.error('DNS not configured yet. Please add the records and try again.')
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Verification failed')
+    } finally {
+      setDomainLoading(false)
+    }
+  }
+
+  const handleRemoveDomain = async () => {
+    if (!confirm('Remove custom domain?')) return
+    try {
+      await api.delete(`/merchants/${merchantId}/custom-domain`)
+      setDomainStatus(null)
+      toast.success('Domain removed')
+    } catch (err) {
+      toast.error('Failed to remove domain')
+    }
+  }
+
+  const copyUrl = () => {
+    navigator.clipboard.writeText(storefrontUrl)
+    toast.success('URL copied to clipboard')
+  }
+
+  const downloadQR = () => {
+    if (!qrData?.qrDataUrl && !qrData?.qrCodeUrl) return
+    const link = document.createElement('a')
+    link.href = qrData.qrDataUrl || qrData.qrCodeUrl
+    link.download = `${merchant?.keyword || 'storefront'}-qr.png`
+    link.click()
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Storefront URL */}
+      <div className="card p-6">
+        <h3 className="font-semibold text-surface-900 mb-4 flex items-center gap-2">
+          <Link size={18} /> Your Storefront URL
+        </h3>
+        <div className="flex items-center gap-2">
+          <div className="flex-1 bg-surface-50 rounded-xl px-4 py-3 font-mono text-sm text-surface-700 truncate">
+            {storefrontUrl}
+          </div>
+          <button onClick={copyUrl} className="btn btn-secondary flex items-center gap-1">
+            <Copy size={14} /> Copy
+          </button>
+          <a href={storefrontUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary flex items-center gap-1">
+            <ExternalLink size={14} /> Open
+          </a>
+        </div>
+        <p className="text-xs text-surface-400 mt-2">
+          Share this URL with your customers. They can browse your menu and order directly.
+        </p>
+      </div>
+
+      {/* QR Code */}
+      <div className="card p-6">
+        <h3 className="font-semibold text-surface-900 mb-4 flex items-center gap-2">
+          <QrCode size={18} /> Storefront QR Code
+        </h3>
+        <div className="flex flex-col sm:flex-row items-center gap-6">
+          <div className="w-48 h-48 bg-surface-50 rounded-xl flex items-center justify-center border">
+            {qrLoading ? (
+              <RefreshCw className="animate-spin text-surface-400" size={32} />
+            ) : qrData?.qrCodeUrl || qrData?.qrDataUrl ? (
+              <img
+                src={qrData.qrDataUrl || qrData.qrCodeUrl}
+                alt="Storefront QR Code"
+                className="w-full h-full rounded-xl"
+              />
+            ) : (
+              <QrCode size={64} className="text-surface-300" />
+            )}
+          </div>
+          <div className="space-y-3">
+            <p className="text-sm text-surface-600">
+              Print this QR code and display it at your counter, packaging, or marketing materials. 
+              Customers can scan it to open your online menu and place orders.
+            </p>
+            <div className="flex gap-2">
+              <button onClick={downloadQR} disabled={!qrData} className="btn btn-secondary flex items-center gap-1">
+                <Download size={14} /> Download PNG
+              </button>
+              <button onClick={() => fetchQR(true)} className="btn btn-secondary flex items-center gap-1">
+                <RefreshCw size={14} /> Regenerate
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Custom Domain */}
+      <div className="card p-6">
+        <h3 className="font-semibold text-surface-900 mb-4 flex items-center gap-2">
+          <Globe size={18} /> Custom Domain
+        </h3>
+        <p className="text-sm text-surface-500 mb-4">
+          Point your own domain to your storefront. Customers will see your brand instead of tezzu.in.
+        </p>
+
+        {!domainStatus?.domain || domainStatus.status === 'removed' ? (
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={domainInput}
+              onChange={e => setDomainInput(e.target.value)}
+              placeholder="e.g., order.yourbusiness.com"
+              className="flex-1 px-4 py-2.5 border border-surface-300 rounded-xl text-sm"
+            />
+            <button
+              onClick={handleSetDomain}
+              disabled={domainLoading || !domainInput.trim()}
+              className="btn btn-primary"
+            >
+              {domainLoading ? 'Setting...' : 'Set Domain'}
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between bg-surface-50 rounded-xl p-4">
+              <div>
+                <p className="font-mono text-sm font-medium text-surface-900">{domainStatus.domain}</p>
+                <p className="text-xs text-surface-500 mt-0.5">
+                  Status: <span className={clsx(
+                    'font-medium',
+                    domainStatus.status === 'active' ? 'text-green-600' :
+                    domainStatus.status === 'pending_dns' ? 'text-yellow-600' :
+                    domainStatus.status === 'verifying' ? 'text-blue-600' :
+                    'text-red-500'
+                  )}>{domainStatus.status?.replace(/_/g, ' ')}</span>
+                  {domainStatus.sslStatus && <> · SSL: {domainStatus.sslStatus}</>}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                {domainStatus.status !== 'active' && (
+                  <button onClick={handleVerifyDomain} disabled={domainLoading} className="btn btn-sm btn-primary">
+                    {domainLoading ? 'Checking...' : 'Verify DNS'}
+                  </button>
+                )}
+                <button onClick={handleRemoveDomain} className="btn btn-sm text-red-500 hover:bg-red-50">
+                  Remove
+                </button>
+              </div>
+            </div>
+
+            {/* DNS Instructions */}
+            {domainStatus.dnsInstructions && domainStatus.status !== 'active' && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                <p className="text-sm font-medium text-blue-800 mb-2">DNS Configuration Required</p>
+                <p className="text-sm text-blue-700">{domainStatus.dnsInstructions.note}</p>
+                <div className="mt-2 bg-white rounded-lg p-3 font-mono text-xs text-blue-900">
+                  <p>Type: {domainStatus.dnsInstructions.type}</p>
+                  <p>Name: {domainStatus.dnsInstructions.name}</p>
+                  <p>Value: {domainStatus.dnsInstructions.value}</p>
+                </div>
+              </div>
+            )}
+
+            {domainStatus.status === 'active' && (
+              <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-2">
+                <CheckCircle size={16} className="text-green-600" />
+                <span className="text-sm text-green-700">Your custom domain is active and serving your storefront!</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function RazorpayPaymentsModal({ merchantId, onClose }) {
   const { data, isLoading } = useQuery({
     queryKey: ['razorpay-payments', merchantId],

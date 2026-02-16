@@ -25,7 +25,10 @@ import {
   Eye,
   ChevronDown,
   ExternalLink,
-  CreditCard
+  CreditCard,
+  Wallet,
+  ArrowUpRight,
+  ArrowDownRight
 } from 'lucide-react'
 import api from '../lib/api'
 import toast from 'react-hot-toast'
@@ -204,6 +207,7 @@ export default function BillingAdmin() {
             { id: 'pending', label: 'Pending', icon: Clock },
             { id: 'overdue', label: 'Overdue', icon: AlertTriangle },
             { id: 'generate', label: 'Generate Invoices', icon: Receipt },
+            { id: 'wallets', label: 'Merchant Wallets', icon: Wallet },
             { id: 'settings', label: 'Settings', icon: Settings }
           ].map(tab => (
             <button
@@ -234,6 +238,7 @@ export default function BillingAdmin() {
         {activeTab === 'pending' && <InvoicesTab status="pending" queryClient={queryClient} />}
         {activeTab === 'overdue' && <InvoicesTab status="overdue" queryClient={queryClient} />}
         {activeTab === 'generate' && <GenerateInvoicesTab queryClient={queryClient} />}
+        {activeTab === 'wallets' && <MerchantWalletsTab />}
         {activeTab === 'settings' && <BillingSettingsTab />}
       </div>
     </div>
@@ -806,6 +811,139 @@ function BillingSettingsTab() {
           </button>
         </div>
       </form>
+    </div>
+  )
+}
+
+// Merchant Wallets Tab (Admin view)
+function MerchantWalletsTab() {
+  const [page, setPage] = useState(1)
+  const [adjustModal, setAdjustModal] = useState(null)
+  const [adjustForm, setAdjustForm] = useState({ amount: '', type: 'credit', reason: '' })
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-wallets', page],
+    queryFn: () => api.get('/wallet/admin/all', { params: { page, limit: 20 } }).then(r => r.data.data)
+  })
+
+  const adjustMutation = useMutation({
+    mutationFn: ({ merchantId, ...body }) => api.post(`/wallet/admin/${merchantId}/adjust`, body),
+    onSuccess: () => {
+      toast.success('Wallet adjusted')
+      setAdjustModal(null)
+      setAdjustForm({ amount: '', type: 'credit', reason: '' })
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'Failed to adjust')
+  })
+
+  if (isLoading) {
+    return <div className="flex justify-center p-8"><Loader2 className="animate-spin" size={32} /></div>
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="border rounded-xl overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-surface-50">
+            <tr>
+              <th className="text-left p-3 font-medium">Merchant</th>
+              <th className="text-right p-3 font-medium">Balance</th>
+              <th className="text-right p-3 font-medium">Total Credits</th>
+              <th className="text-right p-3 font-medium">Total Debits</th>
+              <th className="text-center p-3 font-medium">Auto Top-Up</th>
+              <th className="text-right p-3 font-medium">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {data?.wallets?.map(wallet => (
+              <tr key={wallet._id} className="hover:bg-surface-50">
+                <td className="p-3">
+                  <p className="font-medium">{wallet.merchant?.name || 'N/A'}</p>
+                  <p className="text-xs text-surface-400">{wallet.merchant?.keyword}</p>
+                </td>
+                <td className="p-3 text-right">
+                  <span className={clsx('font-bold', wallet.balance < 5000 ? 'text-red-500' : 'text-green-600')}>
+                    ₹{(wallet.balance / 100).toFixed(2)}
+                  </span>
+                </td>
+                <td className="p-3 text-right text-green-600">₹{(wallet.totalCredits / 100).toFixed(2)}</td>
+                <td className="p-3 text-right text-red-500">₹{(wallet.totalDebits / 100).toFixed(2)}</td>
+                <td className="p-3 text-center">
+                  <span className={clsx('badge text-xs', wallet.autoTopUp?.enabled ? 'badge-success' : 'badge-secondary')}>
+                    {wallet.autoTopUp?.enabled ? 'On' : 'Off'}
+                  </span>
+                </td>
+                <td className="p-3 text-right">
+                  <button
+                    onClick={() => setAdjustModal(wallet)}
+                    className="text-xs text-primary-600 hover:underline"
+                  >
+                    Adjust
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {data?.pagination?.pages > 1 && (
+        <div className="flex justify-center gap-2">
+          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="btn btn-sm btn-secondary">Prev</button>
+          <span className="text-sm text-surface-500 py-1">Page {page} of {data.pagination.pages}</span>
+          <button onClick={() => setPage(p => p + 1)} disabled={page >= data.pagination.pages} className="btn btn-sm btn-secondary">Next</button>
+        </div>
+      )}
+
+      {/* Adjust Modal */}
+      {adjustModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setAdjustModal(null)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold mb-4">Adjust Wallet: {adjustModal.merchant?.name}</h3>
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setAdjustForm(f => ({ ...f, type: 'credit' }))}
+                  className={clsx('flex-1 py-2 rounded-xl border-2 text-sm font-semibold',
+                    adjustForm.type === 'credit' ? 'border-green-600 bg-green-50 text-green-700' : 'border-surface-200'
+                  )}
+                >Credit</button>
+                <button
+                  onClick={() => setAdjustForm(f => ({ ...f, type: 'debit' }))}
+                  className={clsx('flex-1 py-2 rounded-xl border-2 text-sm font-semibold',
+                    adjustForm.type === 'debit' ? 'border-red-500 bg-red-50 text-red-600' : 'border-surface-200'
+                  )}
+                >Debit</button>
+              </div>
+              <input
+                type="number"
+                value={adjustForm.amount}
+                onChange={e => setAdjustForm(f => ({ ...f, amount: e.target.value }))}
+                placeholder="Amount in ₹"
+                className="w-full px-4 py-2.5 border border-surface-300 rounded-xl"
+              />
+              <input
+                type="text"
+                value={adjustForm.reason}
+                onChange={e => setAdjustForm(f => ({ ...f, reason: e.target.value }))}
+                placeholder="Reason (required)"
+                className="w-full px-4 py-2.5 border border-surface-300 rounded-xl"
+              />
+              <button
+                onClick={() => adjustMutation.mutate({
+                  merchantId: adjustModal.merchant?._id,
+                  ...adjustForm,
+                  amount: parseFloat(adjustForm.amount)
+                })}
+                disabled={!adjustForm.amount || !adjustForm.reason || adjustMutation.isPending}
+                className="w-full py-2.5 bg-primary-600 text-white rounded-xl font-semibold disabled:bg-surface-300"
+              >
+                {adjustMutation.isPending ? 'Processing...' : 'Submit'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -27,6 +27,9 @@ import ChatFlowBuilder from './pages/ChatFlowBuilder'
 import RazorpayAdmin from './pages/RazorpayAdmin'
 import BillingAdmin from './pages/BillingAdmin'
 import MerchantProfile from './pages/MerchantProfile'
+import Wallet from './pages/Wallet'
+import Campaigns from './pages/Campaigns'
+import CampaignTemplates from './pages/CampaignTemplates'
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
@@ -147,6 +150,9 @@ export default function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="razorpay" element={<RazorpayAdmin />} />
           <Route path="billing" element={<BillingAdmin />} />
+          <Route path="wallet" element={<Wallet />} />
+          <Route path="campaigns" element={<Campaigns />} />
+          <Route path="campaign-templates" element={<CampaignTemplates />} />
           <Route path="profile" element={<MerchantProfile />} />
           <Route path="how-it-works" element={<HowItWorks />} />
           <Route path="demo-settings" element={<DemoSettings />} />
