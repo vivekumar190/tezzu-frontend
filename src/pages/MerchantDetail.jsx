@@ -1167,6 +1167,7 @@ function StandaloneSettings({ merchant, merchantId }) {
                 Click "Show" if you need to enter credentials manually.
               </p>
             ) : (
+            <>
             <div className="grid lg:grid-cols-2 gap-4">
               <div className="lg:col-span-2">
                 <label className="label">Phone Number ID *</label>
@@ -1272,6 +1273,7 @@ function StandaloneSettings({ merchant, merchantId }) {
                 )}
               </button>
             </div>
+            </>
             )}
           </div>
 
