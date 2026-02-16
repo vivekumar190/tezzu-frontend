@@ -599,7 +599,7 @@ export default function CatalogSync({ merchantId, merchantName, compact = false 
                 <MerchantSyncStatus 
                   merchantId={merchantId} 
                   merchantName={merchantName}
-                  hasMerchantCatalog={!!catalogStatus?.catalogId}
+                  hasMerchantCatalog={!!catalogStatus?.isMerchantCatalog}
                 />
               </div>
             )}
@@ -637,7 +637,7 @@ export default function CatalogSync({ merchantId, merchantName, compact = false 
                   <MerchantSyncStatus 
                     merchantId={merchantId} 
                     merchantName={merchantName}
-                    hasMerchantCatalog={!!catalogStatus?.catalogId}
+                    hasMerchantCatalog={!!catalogStatus?.isMerchantCatalog}
                   />
                 )
               )}
