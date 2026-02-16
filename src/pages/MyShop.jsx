@@ -48,7 +48,8 @@ import {
   Download,
   Copy,
   Globe,
-  Link
+  Link,
+  MessageSquare,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
@@ -2899,6 +2900,164 @@ function StorefrontSettings({ merchantId, merchant }) {
           </div>
         )}
       </div>
+
+      {/* WhatsApp Message Templates */}
+      <WhatsAppTemplatesCard merchantId={merchantId} merchant={merchant} />
+    </div>
+  )
+}
+
+function WhatsAppTemplatesCard({ merchantId, merchant }) {
+  const [templateStatus, setTemplateStatus] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [provisioning, setProvisioning] = useState(false)
+
+  const fetchStatus = async () => {
+    setLoading(true)
+    try {
+      const res = await api.get(`/merchants/${merchantId}/whatsapp-templates/status`)
+      setTemplateStatus(res.data.data)
+    } catch (err) {
+      toast.error('Failed to check template status')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const provisionTemplates = async () => {
+    setProvisioning(true)
+    try {
+      const res = await api.post(`/merchants/${merchantId}/whatsapp-templates/provision`)
+      if (res.data.success) {
+        const { summary } = res.data.data
+        toast.success(`Templates: ${summary.created} created, ${summary.skipped} already existed`)
+        // Refresh status
+        await fetchStatus()
+      } else {
+        toast.error('Some templates failed to create')
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to provision templates')
+    } finally {
+      setProvisioning(false)
+    }
+  }
+
+  useEffect(() => {
+    if (merchantId) fetchStatus()
+  }, [merchantId])
+
+  const statusIcon = (status) => {
+    if (status === 'APPROVED') return <CheckCircle size={14} className="text-green-600" />
+    if (status === 'PENDING') return <Clock size={14} className="text-yellow-600" />
+    if (status === 'REJECTED') return <AlertCircle size={14} className="text-red-500" />
+    return <AlertTriangle size={14} className="text-surface-400" />
+  }
+
+  const statusColor = (status) => {
+    if (status === 'APPROVED') return 'text-green-600 bg-green-50'
+    if (status === 'PENDING') return 'text-yellow-700 bg-yellow-50'
+    if (status === 'REJECTED') return 'text-red-600 bg-red-50'
+    return 'text-surface-500 bg-surface-100'
+  }
+
+  return (
+    <div className="card p-6">
+      <h3 className="font-semibold text-surface-900 mb-1 flex items-center gap-2">
+        <MessageSquare size={18} /> WhatsApp Message Templates
+      </h3>
+      <p className="text-xs text-surface-500 mb-4">
+        Templates are required to send order updates and notifications to customers via WhatsApp.
+        {templateStatus?.isUsingPlatform && (
+          <span className="ml-1 text-blue-600">(Using Tezzu platform templates)</span>
+        )}
+        {!templateStatus?.isUsingPlatform && (
+          <span className="ml-1 text-purple-600">(Your own WhatsApp Business Account)</span>
+        )}
+      </p>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="animate-spin text-surface-400" size={24} />
+        </div>
+      ) : templateStatus ? (
+        <div className="space-y-4">
+          {/* Summary */}
+          <div className="flex items-center gap-4">
+            {templateStatus.allApproved ? (
+              <div className="flex items-center gap-2 text-green-600 bg-green-50 rounded-lg px-3 py-2">
+                <CheckCircle size={16} />
+                <span className="text-sm font-medium">All templates approved</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-yellow-700 bg-yellow-50 rounded-lg px-3 py-2">
+                <AlertTriangle size={16} />
+                <span className="text-sm font-medium">
+                  {templateStatus.missingCount > 0
+                    ? `${templateStatus.missingCount} template(s) missing`
+                    : templateStatus.pendingCount > 0
+                    ? `${templateStatus.pendingCount} template(s) pending approval`
+                    : `${templateStatus.rejectedCount} template(s) rejected`}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Template List */}
+          <div className="border rounded-xl overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-surface-50">
+                <tr>
+                  <th className="text-left p-3 font-medium">Template</th>
+                  <th className="text-left p-3 font-medium">Category</th>
+                  <th className="text-left p-3 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {templateStatus.templates?.map((t) => (
+                  <tr key={t.name} className="hover:bg-surface-50">
+                    <td className="p-3 font-mono text-xs">{t.name}</td>
+                    <td className="p-3 text-xs text-surface-500">{t.category}</td>
+                    <td className="p-3">
+                      <span className={clsx('inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full', statusColor(t.status))}>
+                        {statusIcon(t.status)}
+                        {t.status || 'MISSING'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2">
+            {(!templateStatus.allExist || templateStatus.rejectedCount > 0) && (
+              <button
+                onClick={provisionTemplates}
+                disabled={provisioning}
+                className="btn btn-primary flex items-center gap-2"
+              >
+                {provisioning ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+                {provisioning ? 'Creating...' : 'Setup All Templates'}
+              </button>
+            )}
+            <button
+              onClick={fetchStatus}
+              disabled={loading}
+              className="btn btn-secondary flex items-center gap-1"
+            >
+              <RefreshCw size={14} /> Refresh Status
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="text-center py-6">
+          <button onClick={fetchStatus} className="btn btn-primary flex items-center gap-2 mx-auto">
+            <MessageSquare size={14} /> Check Template Status
+          </button>
+        </div>
+      )}
     </div>
   )
 }
