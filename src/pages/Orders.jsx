@@ -479,15 +479,36 @@ function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateSta
         </div>
       )}
 
-      {/* Quick Actions - Pending orders: Move to Payment Pending first */}
+      {/* Quick Actions - Pending orders */}
       {order.status === 'pending' && (
         <div className="flex gap-2 pt-3 border-t border-surface-100" onClick={e => e.stopPropagation()}>
-          <button 
-            onClick={() => onUpdateStatus('payment_pending')}
-            className="btn btn-warning btn-sm flex-1"
-          >
-            💳 Mark Payment Pending
-          </button>
+          {/* Online orders already paid: Accept directly */}
+          {(order.paymentMethod === 'online' || order.paymentMethod === 'upi') && order.paymentStatus === 'paid' ? (
+            <button 
+              onClick={() => onAccept()}
+              className="btn btn-success btn-sm flex-1"
+            >
+              <CheckCircle className="w-4 h-4" />
+              ✅ Accept Order (Paid)
+            </button>
+          ) : (order.paymentMethod === 'cod' || !order.paymentMethod) ? (
+            /* COD orders: Accept directly, no payment pending needed */
+            <button 
+              onClick={() => onAccept()}
+              className="btn btn-success btn-sm flex-1"
+            >
+              <CheckCircle className="w-4 h-4" />
+              ✅ Accept (COD)
+            </button>
+          ) : (
+            /* Other payment methods that need verification */
+            <button 
+              onClick={() => onUpdateStatus('payment_pending')}
+              className="btn btn-warning btn-sm flex-1"
+            >
+              💳 Mark Payment Pending
+            </button>
+          )}
           <button 
             onClick={() => {
               const reason = prompt('Reason for rejection (optional):')
