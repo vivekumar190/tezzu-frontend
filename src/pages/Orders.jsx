@@ -436,12 +436,31 @@ function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateSta
         <p className="text-lg font-bold text-surface-900">₹{order.totalAmount}</p>
       </div>
 
-      <div className="flex items-center gap-4 text-sm text-surface-600 mb-4">
+      <div className="flex items-center gap-4 text-sm text-surface-600 mb-2">
         <span className="flex items-center gap-1">
           <Phone className="w-4 h-4 text-surface-400" />
           {order.customerPhone}
         </span>
         <span>{order.items?.length || 0} items</span>
+      </div>
+      <div className="flex items-center gap-3 text-xs text-surface-500 mb-4">
+        <span className={clsx(
+          'px-2 py-0.5 rounded-full font-medium',
+          order.paymentMethod === 'online' || order.paymentMethod === 'upi'
+            ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-600'
+        )}>
+          {order.paymentMethod === 'online' || order.paymentMethod === 'upi' ? '💳 Online' : '💰 COD'}
+        </span>
+        <span className={clsx(
+          'px-2 py-0.5 rounded-full font-medium',
+          order.paymentStatus === 'paid' || order.paymentStatus === 'verified'
+            ? 'bg-green-50 text-green-600' : 'bg-yellow-50 text-yellow-600'
+        )}>
+          {order.paymentStatus === 'paid' ? '✅ Paid' : order.paymentStatus === 'verified' ? '✅ Verified' : '⏳ Unpaid'}
+        </span>
+        {order.source === 'web_storefront' && (
+          <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-600 font-medium">🌐 Web</span>
+        )}
       </div>
 
       {/* Show Assigned Delivery Boy */}
@@ -771,6 +790,32 @@ function OrderDetails({ order, onUpdateStatus, onAssignDelivery }) {
                 <p className="font-medium">₹{item.totalPrice || item.price * item.quantity}</p>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* Payment Info */}
+        <div className="p-3 rounded-xl bg-surface-50 border border-surface-100">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">{order.paymentMethod === 'online' || order.paymentMethod === 'upi' ? '💳' : '💰'}</span>
+              <div>
+                <p className="font-medium text-surface-900">
+                  {order.paymentMethod === 'online' || order.paymentMethod === 'upi' ? 'Online Payment' : 'Cash on Delivery'}
+                </p>
+                <p className="text-xs text-surface-500">
+                  {order.source === 'web_storefront' ? '🌐 Web Order' : '💬 WhatsApp Order'}
+                </p>
+              </div>
+            </div>
+            <span className={clsx('badge text-xs', 
+              order.paymentStatus === 'paid' ? 'bg-green-100 text-green-700' : 
+              order.paymentStatus === 'verified' ? 'bg-green-100 text-green-700' :
+              'bg-yellow-100 text-yellow-700'
+            )}>
+              {order.paymentStatus === 'paid' ? '✅ Paid' : 
+               order.paymentStatus === 'verified' ? '✅ Verified' : 
+               '⏳ Pending'}
+            </span>
           </div>
         </div>
 
