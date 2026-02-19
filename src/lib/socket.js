@@ -83,3 +83,15 @@ export function leaveMerchantRoom(merchantId) {
   }
 }
 
+export function joinWhatsAppChatRoom(merchantId) {
+  if (socket?.connected) {
+    socket.emit('join:whatsapp-chat', merchantId)
+  }
+}
+
+export function leaveWhatsAppChatRoom(merchantId) {
+  if (socket?.connected) {
+    socket.emit('leave:whatsapp-chat', merchantId)
+  }
+}
+

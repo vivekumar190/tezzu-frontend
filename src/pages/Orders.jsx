@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { 
@@ -17,12 +17,17 @@ import {
   Bike,
   User,
   X,
-  Calendar
+  Calendar,
+  Plus,
+  Pencil,
+  Minus,
+  Trash2
 } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
 import { getSocket } from '../lib/socket'
+import { useAuthStore } from '../store/authStore'
 import clsx from 'clsx'
 
 const STATUS_OPTIONS = [
@@ -63,14 +68,18 @@ const DATE_FILTERS = [
 
 export default function Orders() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const [selectedOrder, setSelectedOrder] = useState(null)
-  const [mobileDetailOrder, setMobileDetailOrder] = useState(null)
+  const [selectedOrderId, setSelectedOrderId] = useState(null)
+  const [mobileDetailOrderId, setMobileDetailOrderId] = useState(null)
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '')
   const [dateFilter, setDateFilter] = useState('today')
   const [searchQuery, setSearchQuery] = useState('')
   const [assignModalOrder, setAssignModalOrder] = useState(null)
   const [rejectModal, setRejectModal] = useState(null) // { orderId, reason }
+  const [editOrderModal, setEditOrderModal] = useState(null) // order object
+  const [showCreateOrder, setShowCreateOrder] = useState(false)
   const queryClient = useQueryClient()
+  const { user } = useAuthStore()
+  const merchantId = typeof user?.merchant === 'object' ? user?.merchant?._id : user?.merchant
 
   // Fetch order flow configuration
   const { data: orderFlowData } = useQuery({
@@ -152,6 +161,10 @@ export default function Orders() {
     refetchInterval: 30000,
     retry: 2
   })
+
+  const orders = data?.orders || []
+  const selectedOrder = selectedOrderId ? orders.find(o => o._id === selectedOrderId) || null : null
+  const mobileDetailOrder = mobileDetailOrderId ? orders.find(o => o._id === mobileDetailOrderId) || null : null
 
   // Real-time updates
   useEffect(() => {
@@ -253,6 +266,30 @@ export default function Orders() {
     }
   })
 
+  const editOrderMutation = useMutation({
+    mutationFn: ({ orderId, data }) => api.patch(`/orders/${orderId}/edit`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['orders'])
+      toast.success('Order updated successfully')
+      setEditOrderModal(null)
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.error?.message || 'Failed to update order')
+    }
+  })
+
+  const createOrderMutation = useMutation({
+    mutationFn: (data) => api.post('/orders/dashboard-create', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['orders'])
+      toast.success('Order created successfully')
+      setShowCreateOrder(false)
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.error?.message || 'Failed to create order')
+    }
+  })
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -261,13 +298,22 @@ export default function Orders() {
           <h1 className="text-2xl font-display font-bold text-surface-900">Orders</h1>
           <p className="text-surface-500">Manage and track customer orders</p>
         </div>
-        <button 
-          onClick={() => refetch()}
-          className="btn btn-secondary"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Refresh
-        </button>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setShowCreateOrder(true)}
+            className="btn btn-primary"
+          >
+            <Plus className="w-4 h-4" />
+            New Order
+          </button>
+          <button 
+            onClick={() => refetch()}
+            className="btn btn-secondary"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Date Filter Tabs */}
@@ -356,10 +402,10 @@ export default function Orders() {
               <OrderCard
                 key={order._id}
                 order={order}
-                isSelected={selectedOrder?._id === order._id}
+                isSelected={selectedOrderId === order._id}
                 onClick={() => {
-                  setSelectedOrder(order)
-                  if (window.innerWidth < 1024) setMobileDetailOrder(order)
+                  setSelectedOrderId(order._id)
+                  if (window.innerWidth < 1024) setMobileDetailOrderId(order._id)
                 }}
                 onAccept={() => acceptOrderMutation.mutate(order._id)}
                 onReject={() => setRejectModal({ orderId: order._id, reason: '' })}
@@ -377,8 +423,9 @@ export default function Orders() {
           {selectedOrder ? (
             <OrderDetails 
               order={selectedOrder} 
-              onUpdateStatus={(status) => handleStatusUpdate(selectedOrder._id, status)}
+              onUpdateStatus={(status) => handleStatusUpdate(selectedOrderId, status)}
               onAssignDelivery={() => setAssignModalOrder(selectedOrder)}
+              onEdit={() => setEditOrderModal(selectedOrder)}
             />
           ) : (
             <div className="card p-8 text-center sticky top-28">
@@ -392,11 +439,11 @@ export default function Orders() {
       {/* Mobile Order Detail Modal */}
       {mobileDetailOrder && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setMobileDetailOrder(null)} />
+          <div className="absolute inset-0 bg-black/50" onClick={() => setMobileDetailOrderId(null)} />
           <div className="absolute inset-x-0 bottom-0 max-h-[85vh] bg-white rounded-t-2xl overflow-y-auto animate-slide-up">
             <div className="sticky top-0 bg-white border-b border-surface-100 p-4 flex items-center justify-between">
               <h3 className="font-semibold text-surface-900">Order Details</h3>
-              <button onClick={() => setMobileDetailOrder(null)} className="p-2 rounded-lg hover:bg-surface-100">
+              <button onClick={() => setMobileDetailOrderId(null)} className="p-2 rounded-lg hover:bg-surface-100">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -405,11 +452,15 @@ export default function Orders() {
                 order={mobileDetailOrder}
                 onUpdateStatus={(status) => {
                   handleStatusUpdate(mobileDetailOrder._id, status)
-                  setMobileDetailOrder(null)
+                  setMobileDetailOrderId(null)
                 }}
                 onAssignDelivery={() => {
                   setAssignModalOrder(mobileDetailOrder)
-                  setMobileDetailOrder(null)
+                  setMobileDetailOrderId(null)
+                }}
+                onEdit={() => {
+                  setEditOrderModal(mobileDetailOrder)
+                  setMobileDetailOrderId(null)
                 }}
               />
             </div>
@@ -457,6 +508,27 @@ export default function Orders() {
             deliveryBoyId 
           })}
           isLoading={assignDeliveryMutation.isPending}
+        />
+      )}
+
+      {/* Edit Order Modal */}
+      {editOrderModal && (
+        <EditOrderModal
+          order={editOrderModal}
+          merchantId={merchantId}
+          onClose={() => setEditOrderModal(null)}
+          onSave={(data) => editOrderMutation.mutate({ orderId: editOrderModal._id, data })}
+          isLoading={editOrderMutation.isPending}
+        />
+      )}
+
+      {/* Create Order Modal */}
+      {showCreateOrder && (
+        <CreateOrderModal
+          merchantId={merchantId}
+          onClose={() => setShowCreateOrder(false)}
+          onCreate={(data) => createOrderMutation.mutate(data)}
+          isLoading={createOrderMutation.isPending}
         />
       )}
     </div>
@@ -696,17 +768,29 @@ function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateSta
   )
 }
 
-function OrderDetails({ order, onUpdateStatus, onAssignDelivery }) {
+function OrderDetails({ order, onUpdateStatus, onAssignDelivery, onEdit }) {
   const canAssignDelivery = ['accepted', 'preparing', 'ready'].includes(order.status)
+  const canEdit = ['pending', 'payment_pending', 'accepted', 'preparing'].includes(order.status)
 
   return (
     <div className="card sticky top-28 max-h-[calc(100vh-8rem)] flex flex-col overflow-hidden">
       <div className="p-6 border-b border-surface-100 bg-surface-50 flex-shrink-0">
         <div className="flex items-center justify-between mb-2">
           <h3 className="font-semibold text-lg">Order #{order.orderNumber}</h3>
-          <span className={clsx('badge', STATUS_COLORS[order.status])}>
-            {order.status.replaceAll('_', ' ')}
-          </span>
+          <div className="flex items-center gap-2">
+            {canEdit && (
+              <button
+                onClick={onEdit}
+                className="p-1.5 rounded-lg hover:bg-surface-200 text-surface-500 hover:text-primary-600 transition-colors"
+                title="Edit order"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            )}
+            <span className={clsx('badge', STATUS_COLORS[order.status])}>
+              {order.status.replaceAll('_', ' ')}
+            </span>
+          </div>
         </div>
         <p className="text-sm text-surface-500">
           {format(new Date(order.createdAt), 'MMMM d, yyyy h:mm a')}
@@ -1113,3 +1197,467 @@ function AssignDeliveryModal({ order, onClose, onAssign, isLoading }) {
   )
 }
 
+function ProductSearchSelect({ merchantId, onAdd }) {
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(t)
+  }, [search])
+
+  const { data: products } = useQuery({
+    queryKey: ['products-for-order', merchantId, debouncedSearch],
+    queryFn: async () => {
+      const params = new URLSearchParams()
+      if (debouncedSearch) params.append('search', debouncedSearch)
+      params.append('available', 'true')
+      params.append('active', 'true')
+      params.append('limit', '50')
+      const res = await api.get(`/products/merchant/${merchantId}?${params}`)
+      return res.data.data?.products || res.data.data || []
+    },
+    enabled: !!merchantId
+  })
+
+  return (
+    <div>
+      <div className="relative mb-2">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400" />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search products to add..."
+          className="input pl-9 text-sm"
+        />
+      </div>
+      {products && products.length > 0 && (
+        <div className="max-h-40 overflow-y-auto border border-surface-200 rounded-lg divide-y divide-surface-100">
+          {products.map(product => (
+            <button
+              key={product._id}
+              onClick={() => {
+                onAdd({
+                  product: product._id,
+                  name: product.name,
+                  price: product.price,
+                  quantity: 1
+                })
+                setSearch('')
+              }}
+              className="w-full px-3 py-2 text-left hover:bg-surface-50 flex items-center justify-between text-sm transition-colors"
+            >
+              <span className="font-medium text-surface-800">{product.name}</span>
+              <span className="text-surface-500">₹{product.price}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function OrderItemsEditor({ items, onChange }) {
+  const updateItem = (index, field, value) => {
+    const updated = [...items]
+    updated[index] = { ...updated[index], [field]: value }
+    if (field === 'quantity' || field === 'price') {
+      updated[index].totalPrice = (updated[index].price || 0) * (updated[index].quantity || 0)
+    }
+    onChange(updated)
+  }
+
+  const removeItem = (index) => {
+    onChange(items.filter((_, i) => i !== index))
+  }
+
+  return (
+    <div className="space-y-2">
+      {items.map((item, index) => (
+        <div key={index} className="flex items-center gap-2 p-2 bg-surface-50 rounded-lg">
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-sm text-surface-900 truncate">{item.name}</p>
+            <p className="text-xs text-surface-500">₹{item.price} each</p>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => updateItem(index, 'quantity', Math.max(1, item.quantity - 1))}
+              className="w-7 h-7 flex items-center justify-center rounded bg-surface-200 hover:bg-surface-300 transition-colors"
+            >
+              <Minus className="w-3 h-3" />
+            </button>
+            <input
+              type="number"
+              value={item.quantity}
+              onChange={(e) => updateItem(index, 'quantity', Math.max(1, parseInt(e.target.value) || 1))}
+              className="w-12 text-center text-sm font-medium border border-surface-200 rounded py-1"
+              min="1"
+            />
+            <button
+              type="button"
+              onClick={() => updateItem(index, 'quantity', item.quantity + 1)}
+              className="w-7 h-7 flex items-center justify-center rounded bg-surface-200 hover:bg-surface-300 transition-colors"
+            >
+              <Plus className="w-3 h-3" />
+            </button>
+          </div>
+          <p className="w-16 text-right font-semibold text-sm">₹{item.price * item.quantity}</p>
+          <button
+            type="button"
+            onClick={() => removeItem(index)}
+            className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      ))}
+      {items.length === 0 && (
+        <p className="text-sm text-surface-400 text-center py-4">No items added yet</p>
+      )}
+    </div>
+  )
+}
+
+function EditOrderModal({ order, merchantId, onClose, onSave, isLoading }) {
+  const [items, setItems] = useState(
+    order.items.map(item => ({
+      product: item.product?._id || item.product,
+      name: item.name,
+      price: item.price,
+      quantity: item.quantity,
+      totalPrice: item.totalPrice || item.price * item.quantity,
+      variants: item.variants || [],
+      addons: item.addons || [],
+      specialInstructions: item.specialInstructions || ''
+    }))
+  )
+  const [deliveryCharges, setDeliveryCharges] = useState(order.deliveryCharges || 0)
+  const [discount, setDiscount] = useState(order.discount || 0)
+  const [specialInstructions, setSpecialInstructions] = useState(order.specialInstructions || '')
+  const [customerName, setCustomerName] = useState(order.customerName || '')
+  const [customerPhone, setCustomerPhone] = useState(order.customerPhone || '')
+
+  const subtotal = useMemo(() => items.reduce((sum, item) => sum + item.price * item.quantity, 0), [items])
+  const total = subtotal + deliveryCharges - discount
+
+  const addItem = (product) => {
+    const existing = items.findIndex(i => i.product === product.product)
+    if (existing >= 0) {
+      const updated = [...items]
+      updated[existing].quantity += 1
+      updated[existing].totalPrice = updated[existing].price * updated[existing].quantity
+      setItems(updated)
+    } else {
+      setItems([...items, { ...product, totalPrice: product.price * product.quantity }])
+    }
+  }
+
+  const handleSave = () => {
+    if (items.length === 0) {
+      toast.error('Order must have at least one item')
+      return
+    }
+    onSave({
+      items: items.map(i => ({
+        product: i.product,
+        name: i.name,
+        price: i.price,
+        quantity: i.quantity,
+        variants: i.variants,
+        addons: i.addons,
+        specialInstructions: i.specialInstructions
+      })),
+      deliveryCharges,
+      discount,
+      specialInstructions,
+      customerName,
+      customerPhone
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50" onClick={onClose} />
+        <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-surface-100 flex-shrink-0">
+            <div>
+              <h2 className="text-lg font-semibold text-surface-900">Edit Order</h2>
+              <p className="text-sm text-surface-500">#{order.orderNumber}</p>
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-surface-100 rounded-lg">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="p-6 space-y-5 overflow-y-auto flex-1">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-surface-500 mb-1 block">Customer Name</label>
+                <input
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  className="input text-sm"
+                  placeholder="Customer name"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-surface-500 mb-1 block">Phone</label>
+                <input
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  className="input text-sm"
+                  placeholder="+91..."
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-surface-500 mb-2 block">Items</label>
+              <OrderItemsEditor items={items} onChange={setItems} />
+              <div className="mt-3">
+                <ProductSearchSelect merchantId={merchantId} onAdd={addItem} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-surface-500 mb-1 block">Delivery Charges</label>
+                <input
+                  type="number"
+                  value={deliveryCharges}
+                  onChange={(e) => setDeliveryCharges(parseFloat(e.target.value) || 0)}
+                  className="input text-sm"
+                  min="0"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-surface-500 mb-1 block">Discount</label>
+                <input
+                  type="number"
+                  value={discount}
+                  onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
+                  className="input text-sm"
+                  min="0"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-surface-500 mb-1 block">Special Instructions</label>
+              <textarea
+                value={specialInstructions}
+                onChange={(e) => setSpecialInstructions(e.target.value)}
+                className="input text-sm h-16 resize-none"
+                placeholder="Any special instructions..."
+              />
+            </div>
+
+            <div className="p-3 bg-surface-50 rounded-xl space-y-1 text-sm">
+              <div className="flex justify-between"><span className="text-surface-500">Subtotal</span><span>₹{subtotal}</span></div>
+              <div className="flex justify-between"><span className="text-surface-500">Delivery</span><span>₹{deliveryCharges}</span></div>
+              {discount > 0 && <div className="flex justify-between text-green-600"><span>Discount</span><span>-₹{discount}</span></div>}
+              <div className="flex justify-between font-semibold text-base pt-1 border-t border-surface-200">
+                <span>Total</span><span className="text-primary-600">₹{total}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3 px-6 py-4 border-t border-surface-100 flex-shrink-0">
+            <button onClick={onClose} className="btn btn-ghost flex-1">Cancel</button>
+            <button
+              onClick={handleSave}
+              disabled={isLoading || items.length === 0}
+              className="btn btn-primary flex-1"
+            >
+              {isLoading ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CreateOrderModal({ merchantId, onClose, onCreate, isLoading }) {
+  const [customerName, setCustomerName] = useState('')
+  const [customerPhone, setCustomerPhone] = useState('')
+  const [items, setItems] = useState([])
+  const [paymentMethod, setPaymentMethod] = useState('cod')
+  const [deliveryType, setDeliveryType] = useState('delivery')
+  const [deliveryCharges, setDeliveryCharges] = useState(0)
+  const [deliveryAddress, setDeliveryAddress] = useState('')
+  const [specialInstructions, setSpecialInstructions] = useState('')
+
+  const subtotal = useMemo(() => items.reduce((sum, item) => sum + item.price * item.quantity, 0), [items])
+  const total = subtotal + deliveryCharges
+
+  const addItem = (product) => {
+    const existing = items.findIndex(i => i.product === product.product)
+    if (existing >= 0) {
+      const updated = [...items]
+      updated[existing].quantity += 1
+      updated[existing].totalPrice = updated[existing].price * updated[existing].quantity
+      setItems(updated)
+    } else {
+      setItems([...items, { ...product, totalPrice: product.price * product.quantity }])
+    }
+  }
+
+  const handleCreate = () => {
+    if (!customerPhone.trim()) {
+      toast.error('Customer phone is required')
+      return
+    }
+    if (items.length === 0) {
+      toast.error('Add at least one item')
+      return
+    }
+    onCreate({
+      customerName,
+      customerPhone: customerPhone.trim(),
+      items: items.map(i => ({
+        product: i.product,
+        name: i.name,
+        price: i.price,
+        quantity: i.quantity
+      })),
+      paymentMethod,
+      deliveryType,
+      deliveryCharges,
+      deliveryAddress: deliveryAddress ? { street: deliveryAddress } : undefined,
+      specialInstructions
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50" onClick={onClose} />
+        <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-surface-100 flex-shrink-0">
+            <div>
+              <h2 className="text-lg font-semibold text-surface-900">Create New Order</h2>
+              <p className="text-sm text-surface-500">Create an order on behalf of a customer</p>
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-surface-100 rounded-lg">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="p-6 space-y-5 overflow-y-auto flex-1">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-surface-500 mb-1 block">Customer Name</label>
+                <input
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  className="input text-sm"
+                  placeholder="Customer name"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-surface-500 mb-1 block">Phone *</label>
+                <input
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  className="input text-sm"
+                  placeholder="9876543210"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-surface-500 mb-2 block">Items *</label>
+              <ProductSearchSelect merchantId={merchantId} onAdd={addItem} />
+              <div className="mt-3">
+                <OrderItemsEditor items={items} onChange={setItems} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-surface-500 mb-1 block">Payment Method</label>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  className="input text-sm"
+                >
+                  <option value="cod">Cash on Delivery</option>
+                  <option value="online">Online Payment</option>
+                  <option value="upi">UPI</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-surface-500 mb-1 block">Delivery Type</label>
+                <select
+                  value={deliveryType}
+                  onChange={(e) => setDeliveryType(e.target.value)}
+                  className="input text-sm"
+                >
+                  <option value="delivery">Home Delivery</option>
+                  <option value="pickup">Pickup</option>
+                </select>
+              </div>
+            </div>
+
+            {deliveryType === 'delivery' && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-surface-500 mb-1 block">Delivery Address</label>
+                  <input
+                    value={deliveryAddress}
+                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                    className="input text-sm"
+                    placeholder="123 Main St..."
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-surface-500 mb-1 block">Delivery Charges</label>
+                  <input
+                    type="number"
+                    value={deliveryCharges}
+                    onChange={(e) => setDeliveryCharges(parseFloat(e.target.value) || 0)}
+                    className="input text-sm"
+                    min="0"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="text-xs font-medium text-surface-500 mb-1 block">Special Instructions</label>
+              <textarea
+                value={specialInstructions}
+                onChange={(e) => setSpecialInstructions(e.target.value)}
+                className="input text-sm h-16 resize-none"
+                placeholder="Any special instructions..."
+              />
+            </div>
+
+            <div className="p-3 bg-surface-50 rounded-xl space-y-1 text-sm">
+              <div className="flex justify-between"><span className="text-surface-500">Subtotal</span><span>₹{subtotal}</span></div>
+              {deliveryCharges > 0 && <div className="flex justify-between"><span className="text-surface-500">Delivery</span><span>₹{deliveryCharges}</span></div>}
+              <div className="flex justify-between font-semibold text-base pt-1 border-t border-surface-200">
+                <span>Total</span><span className="text-primary-600">₹{total}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3 px-6 py-4 border-t border-surface-100 flex-shrink-0">
+            <button onClick={onClose} className="btn btn-ghost flex-1">Cancel</button>
+            <button
+              onClick={handleCreate}
+              disabled={isLoading || items.length === 0 || !customerPhone.trim()}
+              className="btn btn-primary flex-1"
+            >
+              {isLoading ? 'Creating...' : 'Create Order'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

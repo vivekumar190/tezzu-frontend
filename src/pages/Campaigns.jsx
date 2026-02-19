@@ -30,11 +30,6 @@ export default function Campaigns() {
     queryFn: () => api.get('/campaigns/templates').then(r => r.data.data)
   })
 
-  const { data: walletData } = useQuery({
-    queryKey: ['wallet'],
-    queryFn: () => api.get('/wallet').then(r => r.data.data)
-  })
-
   // Create campaign
   const [newCampaign, setNewCampaign] = useState({
     name: '', template: '', audienceType: 'all_customers', templateVariables: {}
@@ -109,19 +104,6 @@ export default function Campaigns() {
           <Plus size={16} /> New Campaign
         </button>
       </div>
-
-      {/* Wallet balance banner */}
-      {walletData && (
-        <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-green-700">
-            <span className="text-sm">Wallet Balance:</span>
-            <span className="font-bold text-lg">₹{walletData.balanceRupees?.toFixed(2)}</span>
-          </div>
-          <a href="/wallet" className="text-green-600 text-sm font-semibold hover:underline">
-            Top Up →
-          </a>
-        </div>
-      )}
 
       {/* Campaign List */}
       <div className="space-y-4">

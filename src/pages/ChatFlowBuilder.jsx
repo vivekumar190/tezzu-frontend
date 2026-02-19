@@ -146,7 +146,7 @@ export default function ChatFlowBuilder() {
   // Initialize state from saved data
   useEffect(() => {
     if (isFetched && !initialLoadDone) {
-      setUseCustomFlow(savedData?.useCustomChatFlow || false)
+      setUseCustomFlow(savedData?.useCustomChatFlow !== false)
 
       // Build steps from saved data merged with defaults
       const savedSteps = savedData?.chatFlow?.steps || []
@@ -313,16 +313,16 @@ export default function ChatFlowBuilder() {
         </div>
       </div>
 
-      {/* Standalone gate */}
+      {/* Info banner for non-standalone merchants */}
       {!isStandalone && (
-        <div className="card p-4 border-amber-200 bg-amber-50">
+        <div className="card p-4 border-blue-200 bg-blue-50">
           <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+            <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
             <div>
-              <h3 className="font-semibold text-amber-800">Standalone Merchant Required</h3>
-              <p className="text-amber-700 text-sm mt-1">
-                Custom chat flow is only available for standalone merchants with their own WhatsApp Business number.
-                Configure your WhatsApp number in <strong>My Shop</strong> first.
+              <h3 className="font-semibold text-blue-800">Connect WhatsApp for Full Control</h3>
+              <p className="text-blue-700 text-sm mt-1">
+                You can customize your chat flow below. To use it with your own WhatsApp number,
+                complete the WhatsApp setup in <strong>My Shop</strong>.
               </p>
             </div>
           </div>
@@ -340,18 +340,17 @@ export default function ChatFlowBuilder() {
               <Zap className={clsx('w-5 h-5', useCustomFlow ? 'text-green-600' : 'text-surface-400')} />
             </div>
             <div>
-              <h2 className="font-semibold text-surface-900">Enable Custom Chat Flow</h2>
+              <h2 className="font-semibold text-surface-900">Custom Chat Flow</h2>
               <p className="text-sm text-surface-500">
                 {useCustomFlow
-                  ? 'Your customers see your customized flow. Toggle OFF to revert to default.'
-                  : 'When ON, customers will see your customized conversation. When OFF, the default flow runs.'}
+                  ? 'Active — customers see your customized conversation flow.'
+                  : 'Disabled — the basic default flow runs instead. Recommended to keep ON.'}
               </p>
             </div>
           </div>
           <button
             onClick={() => { setUseCustomFlow(!useCustomFlow); setHasChanges(true) }}
-            disabled={!isStandalone}
-            className={clsx('transition-colors disabled:opacity-50 disabled:cursor-not-allowed')}
+            className="transition-colors"
           >
             {useCustomFlow
               ? <ToggleRight className="w-12 h-12 text-green-500" />

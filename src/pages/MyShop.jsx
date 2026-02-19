@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { 
   Store, 
   MapPin, 
@@ -50,6 +51,8 @@ import {
   Globe,
   Link,
   MessageSquare,
+  GitBranch,
+  MessageCircle,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
@@ -58,6 +61,7 @@ import { useAuthStore } from '../store/authStore'
 
 export default function MyShop() {
   const { user } = useAuthStore()
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('menu')
   const [showCategoryModal, setShowCategoryModal] = useState(false)
   const [showProductModal, setShowProductModal] = useState(false)
@@ -707,6 +711,40 @@ export default function MyShop() {
               <button onClick={() => setShowEditModal(true)} className="btn btn-primary">
                 <Edit className="w-4 h-4" />
                 Edit Settings
+              </button>
+            </div>
+          </div>
+
+          {/* Flow Configuration */}
+          <div className="card p-6 space-y-4">
+            <h3 className="text-lg font-semibold text-surface-900">Flow Configuration</h3>
+            <p className="text-sm text-surface-500">Configure how your ordering process and chatbot conversations work.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <button
+                onClick={() => navigate('/order-flow')}
+                className="flex items-center gap-4 p-4 rounded-xl border border-surface-200 hover:border-primary-300 hover:bg-primary-50/50 transition-all text-left group"
+              >
+                <div className="w-10 h-10 rounded-lg bg-primary-100 text-primary-600 flex items-center justify-center group-hover:bg-primary-200 transition-colors">
+                  <GitBranch className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-surface-900">Order Flow</p>
+                  <p className="text-xs text-surface-500 mt-0.5">Customize order steps, confirmations & notifications</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-surface-400 group-hover:text-primary-500 transition-colors" />
+              </button>
+              <button
+                onClick={() => navigate('/chat-flow')}
+                className="flex items-center gap-4 p-4 rounded-xl border border-surface-200 hover:border-primary-300 hover:bg-primary-50/50 transition-all text-left group"
+              >
+                <div className="w-10 h-10 rounded-lg bg-green-100 text-green-600 flex items-center justify-center group-hover:bg-green-200 transition-colors">
+                  <MessageCircle className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-surface-900">Chat Flow</p>
+                  <p className="text-xs text-surface-500 mt-0.5">Configure chatbot responses, menus & conversation flow</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-surface-400 group-hover:text-primary-500 transition-colors" />
               </button>
             </div>
           </div>

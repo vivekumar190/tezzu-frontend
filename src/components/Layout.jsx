@@ -17,15 +17,15 @@ import {
   MessageCircle,
   BookOpen,
   CalendarClock,
-  GitBranch,
   Volume2,
   VolumeX,
   CreditCard,
   Receipt,
   UserCircle,
-  Wallet,
   Megaphone,
-  FileText
+  FileText,
+  MessageSquareText,
+  Headphones
 } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { initSocket, disconnectSocket } from '../lib/socket'
@@ -37,12 +37,10 @@ const navigation = [
   { name: 'My Shop', href: '/my-shop', icon: Store, merchantOnly: true },
   { name: 'Merchants', href: '/merchants', icon: Store, adminOnly: true },
   { name: 'Orders', href: '/orders', icon: ShoppingBag },
-  { name: 'Order Flow', href: '/order-flow', icon: GitBranch, merchantOnly: true },
-  { name: 'Chat Flow', href: '/chat-flow', icon: MessageCircle, merchantOnly: true },
   { name: 'Products', href: '/products', icon: Package },
   { name: 'Customers', href: '/customers', icon: UsersRound },
   { name: 'Staff', href: '/staff-management', icon: Users, merchantOnly: true },
-  { name: 'Wallet', href: '/wallet', icon: Wallet, merchantOnly: true },
+  { name: 'WhatsApp Chat', href: '/whatsapp-chat', icon: MessageSquareText, merchantOnly: true },
   { name: 'Campaigns', href: '/campaigns', icon: Megaphone, merchantOnly: true },
   { name: 'Profile & Billing', href: '/profile', icon: UserCircle, merchantOnly: true },
   { name: 'Users', href: '/users', icon: Users, adminOnly: true },
@@ -61,9 +59,12 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [notifications, setNotifications] = useState([])
   const [showNotifications, setShowNotifications] = useState(false)
+  const [supportRequests, setSupportRequests] = useState([])
+  const [showSupportPanel, setShowSupportPanel] = useState(false)
   const [soundEnabled, setSoundEnabled] = useState(true)
   const [selectedNotification, setSelectedNotification] = useState(null)
   const notificationRef = useRef(null)
+  const supportRef = useRef(null)
   const { user, logout, _hasHydrated } = useAuthStore()
   const navigate = useNavigate()
 
@@ -137,11 +138,14 @@ export default function Layout() {
     }) || []
   }, [userRole, isAdmin, isMerchantAdmin, _hasHydrated, user])
 
-  // Close notification dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (notificationRef.current && !notificationRef.current.contains(event.target)) {
         setShowNotifications(false)
+      }
+      if (supportRef.current && !supportRef.current.contains(event.target)) {
+        setShowSupportPanel(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -233,6 +237,21 @@ export default function Layout() {
             }, ...prev].slice(0, 20))
             playNotificationSound()
           }
+        })
+
+        // Listen for customer support requests
+        socket.on('support:request', (data) => {
+          console.log('🆘 Support request:', data)
+          setSupportRequests(prev => [{
+            id: Date.now(),
+            phone: data.phone,
+            name: data.name || data.phone,
+            message: data.message,
+            sessionId: data.sessionId,
+            time: data.timestamp || new Date(),
+            read: false
+          }, ...prev].slice(0, 30))
+          playNotificationSound()
         })
       }
     } catch (err) {
@@ -368,6 +387,96 @@ export default function Layout() {
 
             <div className="flex-1" />
 
+            {/* Support Requests */}
+            <div className="relative" ref={supportRef}>
+              <button
+                onClick={() => { setShowSupportPanel(!showSupportPanel); setShowNotifications(false) }}
+                className="relative p-2 text-surface-500 hover:text-surface-700 hover:bg-surface-50 rounded-xl transition-colors"
+                title="Support Requests"
+              >
+                <Headphones className="w-5 h-5" />
+                {supportRequests.filter(s => !s.read).length > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[20px] h-5 bg-orange-500 text-white text-xs font-bold rounded-full flex items-center justify-center px-1 animate-pulse">
+                    {supportRequests.filter(s => !s.read).length > 9 ? '9+' : supportRequests.filter(s => !s.read).length}
+                  </span>
+                )}
+              </button>
+
+              {showSupportPanel && (
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-lg border border-surface-100 overflow-hidden z-50">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-surface-100 bg-orange-50">
+                    <h3 className="font-semibold text-surface-900 flex items-center gap-2">
+                      <Headphones className="w-4 h-4 text-orange-600" />
+                      Support Requests
+                    </h3>
+                    <div className="flex gap-2">
+                      {supportRequests.filter(s => !s.read).length > 0 && (
+                        <button
+                          onClick={() => setSupportRequests(prev => prev.map(s => ({ ...s, read: true })))}
+                          className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                        >
+                          Mark all read
+                        </button>
+                      )}
+                      {supportRequests.length > 0 && (
+                        <button
+                          onClick={() => { setSupportRequests([]); setShowSupportPanel(false) }}
+                          className="text-xs text-surface-500 hover:text-surface-700"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="max-h-96 overflow-y-auto">
+                    {supportRequests.length === 0 ? (
+                      <div className="p-8 text-center text-surface-400">
+                        <Headphones className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No support requests</p>
+                        <p className="text-xs mt-1 text-surface-300">When customers type "help", requests appear here</p>
+                      </div>
+                    ) : (
+                      supportRequests.map((req) => (
+                        <div
+                          key={req.id}
+                          className={clsx(
+                            'px-4 py-3 border-b border-surface-50 last:border-0',
+                            !req.read && 'bg-orange-50/50'
+                          )}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center flex-shrink-0">
+                              <Headphones className="w-4 h-4" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className={clsx('text-sm', !req.read ? 'text-surface-900 font-medium' : 'text-surface-600')}>
+                                {req.name}
+                              </p>
+                              <p className="text-xs text-surface-500 truncate">{req.message}</p>
+                              <p className="text-xs text-surface-400 mt-0.5">
+                                {formatDistanceToNow(new Date(req.time), { addSuffix: true })}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => {
+                                setSupportRequests(prev => prev.map(s => s.id === req.id ? { ...s, read: true } : s))
+                                setShowSupportPanel(false)
+                                navigate('/whatsapp-chat')
+                              }}
+                              className="text-xs px-2.5 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex-shrink-0 font-medium"
+                            >
+                              Chat
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Sound Toggle */}
             <button
               onClick={() => {
@@ -396,7 +505,7 @@ export default function Layout() {
             {/* Notifications */}
             <div className="relative" ref={notificationRef}>
               <button 
-                onClick={() => setShowNotifications(!showNotifications)}
+                onClick={() => { setShowNotifications(!showNotifications); setShowSupportPanel(false) }}
                 className="relative p-2 text-surface-500 hover:text-surface-700 hover:bg-surface-50 rounded-xl transition-colors"
               >
                 <Bell className="w-5 h-5" />
