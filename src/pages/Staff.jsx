@@ -87,9 +87,14 @@ export default function Staff() {
     setShowModal(true)
   }
 
+  const [deleteConfirm, setDeleteConfirm] = useState(null)
   const handleDelete = (member) => {
-    if (confirm(`Are you sure you want to delete ${member.name}?`)) {
-      deleteMutation.mutate(member._id)
+    setDeleteConfirm(member)
+  }
+  const confirmDelete = () => {
+    if (deleteConfirm) {
+      deleteMutation.mutate(deleteConfirm._id)
+      setDeleteConfirm(null)
     }
   }
 
@@ -160,7 +165,7 @@ export default function Staff() {
         </div>
         {Object.entries(stats.byRole || {}).map(([role, count]) => (
           <div key={role} className="card p-4">
-            <p className="text-sm text-surface-500 capitalize">{role.replace('_', ' ')}s</p>
+            <p className="text-sm text-surface-500 capitalize">{role.replaceAll('_', ' ')}s</p>
             <p className="text-2xl font-bold text-surface-900">{count}</p>
           </div>
         ))}
@@ -188,7 +193,7 @@ export default function Staff() {
           >
             <option value="">All Roles</option>
             {Object.entries(roles).map(([key, value]) => (
-              <option key={key} value={value}>{key.replace('_', ' ')}</option>
+              <option key={key} value={value}>{key.replaceAll('_', ' ')}</option>
             ))}
           </select>
         </div>
@@ -330,6 +335,23 @@ export default function Staff() {
           roles={roles}
           onClose={() => setShowModal(false)}
         />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setDeleteConfirm(null)} />
+          <div className="relative bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
+            <h3 className="text-lg font-semibold text-surface-900 mb-2">Delete Staff Member</h3>
+            <p className="text-sm text-surface-500 mb-6">
+              Are you sure you want to delete <strong>{deleteConfirm.name}</strong>? This action cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteConfirm(null)} className="btn btn-ghost flex-1">Cancel</button>
+              <button onClick={confirmDelete} className="btn btn-danger flex-1">Delete</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
@@ -494,7 +516,7 @@ function StaffModal({ staff, roles, onClose }) {
                 >
                   {Object.entries(roles).map(([key, value]) => (
                     <option key={key} value={value}>
-                      {key.replace('_', ' ')}
+                      {key.replaceAll('_', ' ')}
                     </option>
                   ))}
                 </select>

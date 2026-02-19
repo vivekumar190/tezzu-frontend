@@ -64,9 +64,12 @@ const DATE_FILTERS = [
 export default function Orders() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [selectedOrder, setSelectedOrder] = useState(null)
+  const [mobileDetailOrder, setMobileDetailOrder] = useState(null)
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '')
-  const [dateFilter, setDateFilter] = useState('today') // Default to today
+  const [dateFilter, setDateFilter] = useState('today')
+  const [searchQuery, setSearchQuery] = useState('')
   const [assignModalOrder, setAssignModalOrder] = useState(null)
+  const [rejectModal, setRejectModal] = useState(null) // { orderId, reason }
   const queryClient = useQueryClient()
 
   // Fetch order flow configuration
@@ -108,10 +111,11 @@ export default function Orders() {
     switch (dateFilter) {
       case 'today':
         return { startDate: today.toISOString() }
-      case 'yesterday':
+      case 'yesterday': {
         const yesterday = new Date(today)
         yesterday.setDate(yesterday.getDate() - 1)
         return { startDate: yesterday.toISOString(), endDate: today.toISOString() }
+      }
       case 'week':
         const weekAgo = new Date(today)
         weekAgo.setDate(weekAgo.getDate() - 7)
@@ -125,19 +129,27 @@ export default function Orders() {
     }
   }
 
+  // Debounced search
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 400)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['orders', statusFilter, dateFilter],
+    queryKey: ['orders', statusFilter, dateFilter, debouncedSearch],
     queryFn: async () => {
       const params = new URLSearchParams()
       if (statusFilter) params.append('status', statusFilter)
+      if (debouncedSearch) params.append('search', debouncedSearch)
       const dateRange = getDateRange()
       if (dateRange.startDate) params.append('startDate', dateRange.startDate)
       if (dateRange.endDate) params.append('endDate', dateRange.endDate)
-      params.append('limit', '100')
+      params.append('limit', '200')
       const res = await api.get(`/orders?${params}`)
       return res.data.data
     },
-    refetchInterval: 30000, // Auto refresh every 30 seconds
+    refetchInterval: 30000,
     retry: 2
   })
 
@@ -285,6 +297,8 @@ export default function Orders() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-surface-400" />
               <input
                 type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search by order number or phone..."
                 className="input pl-12"
               />
@@ -336,19 +350,25 @@ export default function Orders() {
               <p className="text-surface-500">Orders will appear here when customers place them</p>
             </div>
           ) : (
-            (Array.isArray(data.orders) ? data.orders : []).map((order) => (
+            <>
+            <p className="text-sm text-surface-500 px-1">Showing {data.orders.length}{data.pagination ? ` of ${data.pagination.total}` : ''} orders</p>
+            {(Array.isArray(data.orders) ? data.orders : []).map((order) => (
               <OrderCard
                 key={order._id}
                 order={order}
                 isSelected={selectedOrder?._id === order._id}
-                onClick={() => setSelectedOrder(order)}
+                onClick={() => {
+                  setSelectedOrder(order)
+                  if (window.innerWidth < 1024) setMobileDetailOrder(order)
+                }}
                 onAccept={() => acceptOrderMutation.mutate(order._id)}
-                onReject={(reason) => rejectOrderMutation.mutate({ orderId: order._id, reason })}
+                onReject={() => setRejectModal({ orderId: order._id, reason: '' })}
                 onUpdateStatus={(status) => handleStatusUpdate(order._id, status)}
                 onAssignDelivery={() => setAssignModalOrder(order)}
                 getNextStatuses={getNextStatuses}
               />
-            ))
+            ))}
+            </>
           )}
         </div>
 
@@ -368,6 +388,64 @@ export default function Orders() {
           )}
         </div>
       </div>
+
+      {/* Mobile Order Detail Modal */}
+      {mobileDetailOrder && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setMobileDetailOrder(null)} />
+          <div className="absolute inset-x-0 bottom-0 max-h-[85vh] bg-white rounded-t-2xl overflow-y-auto animate-slide-up">
+            <div className="sticky top-0 bg-white border-b border-surface-100 p-4 flex items-center justify-between">
+              <h3 className="font-semibold text-surface-900">Order Details</h3>
+              <button onClick={() => setMobileDetailOrder(null)} className="p-2 rounded-lg hover:bg-surface-100">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4">
+              <OrderDetails
+                order={mobileDetailOrder}
+                onUpdateStatus={(status) => {
+                  handleStatusUpdate(mobileDetailOrder._id, status)
+                  setMobileDetailOrder(null)
+                }}
+                onAssignDelivery={() => {
+                  setAssignModalOrder(mobileDetailOrder)
+                  setMobileDetailOrder(null)
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Reason Modal */}
+      {rejectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setRejectModal(null)} />
+          <div className="relative bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
+            <h3 className="text-lg font-semibold text-surface-900 mb-3">Reject Order</h3>
+            <p className="text-sm text-surface-500 mb-4">This will notify the customer. Optionally provide a reason.</p>
+            <textarea
+              value={rejectModal.reason}
+              onChange={(e) => setRejectModal(prev => ({ ...prev, reason: e.target.value }))}
+              placeholder="Reason for rejection (optional)..."
+              className="input w-full h-24 resize-none mb-4"
+              autoFocus
+            />
+            <div className="flex gap-3">
+              <button onClick={() => setRejectModal(null)} className="btn btn-ghost flex-1">Cancel</button>
+              <button
+                onClick={() => {
+                  rejectOrderMutation.mutate({ orderId: rejectModal.orderId, reason: rejectModal.reason })
+                  setRejectModal(null)
+                }}
+                className="btn btn-danger flex-1"
+              >
+                Reject Order
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Assign Delivery Boy Modal */}
       {assignModalOrder && (
@@ -517,10 +595,7 @@ function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateSta
             </button>
           )}
           <button 
-            onClick={() => {
-              const reason = prompt('Reason for rejection (optional):')
-              onReject(reason)
-            }}
+            onClick={(e) => { e.stopPropagation(); onReject() }}
             className="btn btn-danger btn-sm flex-1"
           >
             <XCircle className="w-4 h-4" />

@@ -320,28 +320,34 @@ export default function StaffOrders() {
   const updateStatusMutation = useMutation({
     mutationFn: ({ orderId, status }) => api.patch(`/orders/${orderId}/status`, { status }),
     onSuccess: (response, variables) => {
-      setStatusFilter('')
       queryClient.invalidateQueries(['staff-orders'])
       const config = STATUS_CONFIG[variables.status]
       toast.success(`✓ ${config?.label || variables.status}`)
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.error?.message || 'Failed to update status')
     }
   })
 
   const acceptOrderMutation = useMutation({
     mutationFn: (orderId) => api.post(`/orders/${orderId}/accept`),
     onSuccess: () => {
-      setStatusFilter('')
       queryClient.invalidateQueries(['staff-orders'])
       toast.success('✓ Order accepted!')
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.error?.message || 'Failed to accept order')
     }
   })
 
   const rejectOrderMutation = useMutation({
     mutationFn: ({ orderId, reason }) => api.post(`/orders/${orderId}/reject`, { reason }),
     onSuccess: () => {
-      setStatusFilter('')
       queryClient.invalidateQueries(['staff-orders'])
       toast.success('Order rejected')
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.error?.message || 'Failed to reject order')
     }
   })
 
@@ -462,8 +468,8 @@ export default function StaffOrders() {
             <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-4">
               <Package className="w-10 h-10 text-slate-400" />
             </div>
-            <p className="text-xl font-medium text-slate-600 mb-2">No orders yet</p>
-            <p className="text-sm text-slate-400">New orders will appear here</p>
+            <p className="text-xl font-medium text-slate-600 mb-2">{statusFilter ? 'No matching orders' : 'No orders yet'}</p>
+            <p className="text-sm text-slate-400">{statusFilter ? 'Try changing the filter above' : 'New orders will appear here'}</p>
         </div>
       ) : (
           <>
@@ -493,6 +499,7 @@ export default function StaffOrders() {
                       isNew
                       userRole={user?.staffRole}
                       getNextStatusesFn={getDynamicNextStatuses}
+                      isUpdating={updateStatusMutation.isPending || acceptOrderMutation.isPending}
                 />
               ))}
             </div>
@@ -522,6 +529,7 @@ export default function StaffOrders() {
                   onUpdateStatus={(status) => updateStatusMutation.mutate({ orderId: order._id, status })}
                       userRole={user?.staffRole}
                       getNextStatusesFn={getDynamicNextStatuses}
+                      isUpdating={updateStatusMutation.isPending}
                 />
               ))}
             </div>
@@ -580,7 +588,7 @@ export default function StaffOrders() {
   )
 }
 
-function OrderCard({ order, onSelect, onAccept, onReject, onUpdateStatus, isNew, compact, userRole, getNextStatusesFn }) {
+function OrderCard({ order, onSelect, onAccept, onReject, onUpdateStatus, isNew, compact, userRole, getNextStatusesFn, isUpdating }) {
   const nextStatuses = getNextStatusesFn ? getNextStatusesFn(order.status, userRole) : getNextStatuses(order.status, userRole)
   const config = STATUS_CONFIG[order.status] || STATUS_CONFIG.pending
   const StatusIcon = config.icon
@@ -643,8 +651,8 @@ function OrderCard({ order, onSelect, onAccept, onReject, onUpdateStatus, isNew,
         </div>
           {order.deliveryAddress?.street && (
             <div className="flex items-center gap-2 text-sm text-slate-500">
-              <MapPin className="w-4 h-4 text-slate-400" />
-              <span>{order.deliveryAddress.street}</span>
+              <MapPin className="w-4 h-4 text-slate-400 flex-shrink-0" />
+              <span className="line-clamp-2">{[order.deliveryAddress.street, order.deliveryAddress.city, order.deliveryAddress.pincode].filter(Boolean).join(', ')}</span>
             </div>
           )}
         </div>
@@ -659,6 +667,7 @@ function OrderCard({ order, onSelect, onAccept, onReject, onUpdateStatus, isNew,
               return (
               <button
                   key={status}
+                  disabled={isUpdating}
                 onClick={(e) => {
                   e.stopPropagation()
                     if (status === 'accepted') {
@@ -668,11 +677,11 @@ function OrderCard({ order, onSelect, onAccept, onReject, onUpdateStatus, isNew,
                     }
                   }}
                 className={clsx(
-                    'w-full py-3 rounded-xl font-semibold text-white transition-all active:scale-95',
+                    'w-full py-3 rounded-xl font-semibold text-white transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed',
                     actionConfig.color
                 )}
               >
-                  {actionConfig.label}
+                  {isUpdating ? 'Updating...' : actionConfig.label}
               </button>
               )
             })}

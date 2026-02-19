@@ -80,8 +80,8 @@ export default function StaffLogin() {
         _hasHydrated: true
       })
       
-      // Store in localStorage
-      localStorage.setItem('powermerchant-auth', JSON.stringify({
+      // Store in sessionStorage (must match authStore's persist storage)
+      sessionStorage.setItem('powermerchant-auth', JSON.stringify({
         state: { user, token }
       }))
       

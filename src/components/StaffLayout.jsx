@@ -70,20 +70,18 @@ export default function StaffLayout() {
           console.log('[Staff] Joined merchant room (immediate):', merchantId)
         }
 
-        // Listen for new orders (backend emits 'order:new')
-        socket.on('order:new', (order) => {
-          console.log('[Staff] 📦 New order received:', order?.orderNumber)
-          setNewOrderCount(prev => prev + 1)
-          
-          // Play bell sound if enabled
+        const playSound = () => {
           if (soundEnabled && audioRef.current) {
             audioRef.current.currentTime = 0
-            audioRef.current.play().catch(err => {
-              console.log('Audio play failed:', err.message)
-            })
+            audioRef.current.play().catch(() => {})
           }
-          
-          // Show browser notification if supported
+        }
+
+        // Listen for new orders (backend emits 'order:created')
+        socket.on('order:created', (order) => {
+          console.log('[Staff] 📦 New order:', order?.orderNumber)
+          setNewOrderCount(prev => prev + 1)
+          playSound()
           if (Notification.permission === 'granted') {
             new Notification('🔔 New Order!', {
               body: `Order #${order?.orderNumber} - ₹${order?.totalAmount}`,
@@ -93,37 +91,13 @@ export default function StaffLayout() {
           }
         })
 
-        // Listen for order updates
-        socket.on('order:updated', (order) => {
-          console.log('[Staff] 🔄 Order updated:', order?.orderNumber, order?.status)
-          setNewOrderCount(prev => prev + 1)
-          
-          // Play bell sound if enabled
-          if (soundEnabled && audioRef.current) {
-            audioRef.current.currentTime = 0
-            audioRef.current.play().catch(err => {
-              console.log('Audio play failed:', err.message)
-            })
-          }
+        // Listen for status updates (no badge increment — just sound)
+        socket.on('order:updated', () => {
+          playSound()
         })
 
-        // Listen for order assigned to this staff
-        socket.on('order:assigned', (data) => {
-          console.log('[Staff] 👤 Order assigned:', data)
-          if (soundEnabled && audioRef.current) {
-            audioRef.current.currentTime = 0
-            audioRef.current.play().catch(() => {})
-          }
-        })
-
-        // Listen for accepted orders
-        socket.on('order:accepted', (order) => {
-          console.log('[Staff] ✅ Order accepted:', order?.orderNumber)
-          if (soundEnabled && audioRef.current) {
-            audioRef.current.currentTime = 0
-            audioRef.current.play().catch(() => {})
-          }
-        })
+        socket.on('order:assigned', () => playSound())
+        socket.on('order:accepted', () => playSound())
       }
     } catch (err) {
       console.error('Socket error in StaffLayout:', err)
@@ -132,7 +106,7 @@ export default function StaffLayout() {
     return () => {
       try {
         const socket = getSocket()
-        socket?.off('order:new')
+        socket?.off('connect')
         socket?.off('order:created')
         socket?.off('order:updated')
         socket?.off('order:assigned')

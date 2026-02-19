@@ -39,7 +39,7 @@ function CatalogSetupPanel({ onSetupComplete }) {
       const res = await api.get('/catalog/debug');
       return res.data.data;
     },
-    retry: false
+    retry: 1
   });
 
   const catalogs = debugData?.existingCatalogs || [];
@@ -77,7 +77,7 @@ function CatalogSetupPanel({ onSetupComplete }) {
       onSetupComplete?.();
     },
     onError: (error) => {
-      toast.error(error.response?.data?.error?.message || 'Failed to configure catalog');
+      toast.error(error.response?.data?.error || 'Failed to configure catalog');
     }
   });
 
@@ -133,11 +133,28 @@ function CatalogSetupPanel({ onSetupComplete }) {
         </div>
       )}
 
+      {/* Loading state */}
+      {loadingCatalogs && (
+        <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg flex items-center gap-2">
+          <RefreshCw className="w-4 h-4 animate-spin text-gray-400" />
+          <p className="text-sm text-gray-600">Checking for existing catalogs...</p>
+        </div>
+      )}
+
       {/* No catalogs found - show helpful message */}
       {!loadingCatalogs && catalogs.length === 0 && debugData && (
         <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
           <p className="text-sm text-yellow-800">
             <strong>No existing catalogs found.</strong> {debugData.solution}
+          </p>
+        </div>
+      )}
+
+      {/* Debug query error */}
+      {!loadingCatalogs && catalogsError && !debugData && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-sm text-red-700">
+            Could not check existing catalogs: {catalogsError.response?.data?.error || catalogsError.message}
           </p>
         </div>
       )}

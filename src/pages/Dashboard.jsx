@@ -13,7 +13,10 @@ import {
   Users,
   MessageCircle,
   Activity,
-  MapPin
+  MapPin,
+  CheckCircle2,
+  Circle,
+  Rocket
 } from 'lucide-react'
 import { format, formatDistanceToNow } from 'date-fns'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts'
@@ -94,6 +97,17 @@ export default function Dashboard() {
       return res.data.data
     },
     enabled: user?.role === 'admin'
+  })
+
+  // Setup checklist for merchant admins
+  const { data: setupStatus } = useQuery({
+    queryKey: ['setup-status'],
+    queryFn: async () => {
+      const res = await api.get('/merchants/me/setup-status')
+      return res.data.data
+    },
+    enabled: user?.role === 'merchant_admin',
+    staleTime: 60000,
   })
 
   useEffect(() => {
@@ -241,6 +255,49 @@ export default function Dashboard() {
         </h1>
         <p className="text-surface-500 mt-1">Here's what's happening with your business today.</p>
       </div>
+
+      {/* Setup Checklist (merchant_admin only, hide when fully set up) */}
+      {user?.role === 'merchant_admin' && setupStatus && !setupStatus.isFullySetup && (
+        <div className="card p-6 border-l-4 border-l-primary-500 bg-gradient-to-r from-primary-50/50 to-transparent">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-primary-100 flex items-center justify-center">
+                <Rocket className="w-5 h-5 text-primary-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-surface-900">Complete Your Setup</h3>
+                <p className="text-xs text-surface-500">{setupStatus.completedCount}/{setupStatus.totalSteps} steps done</p>
+              </div>
+            </div>
+            <div className="w-20 h-2 bg-surface-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary-500 rounded-full transition-all duration-500"
+                style={{ width: `${(setupStatus.completedCount / setupStatus.totalSteps) * 100}%` }}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+            {setupStatus.steps.map((step) => (
+              <Link
+                key={step.id}
+                to={step.done ? '#' : step.link}
+                className={clsx(
+                  'flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors',
+                  step.done
+                    ? 'bg-green-50 text-green-700'
+                    : 'bg-surface-100 text-surface-600 hover:bg-primary-50 hover:text-primary-700'
+                )}
+              >
+                {step.done
+                  ? <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+                  : <Circle className="w-4 h-4 text-surface-400 flex-shrink-0" />
+                }
+                <span className={step.done ? 'line-through opacity-70' : 'font-medium'}>{step.label}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

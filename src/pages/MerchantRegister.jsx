@@ -471,17 +471,22 @@ export default function MerchantRegister() {
                   </p>
                 </div>
 
-                <div className="bg-surface-50 rounded-xl p-4 text-left space-y-2">
+                <div className="bg-surface-50 rounded-xl p-4 text-left space-y-3">
                   <p className="text-sm text-surface-600">
                     <strong>Store URL:</strong>{' '}
-                    <a href={`https://tezzu.in/@${merchantData?.keyword || keyword}`} target="_blank" rel="noreferrer"
+                    <a href={`https://tezzu.in/store/${merchantData?.keyword || keyword}`} target="_blank" rel="noreferrer"
                        className="text-primary-600 font-mono">
-                      tezzu.in/@{merchantData?.keyword || keyword}
+                      tezzu.in/store/{merchantData?.keyword || keyword}
                     </a>
                   </p>
-                  <p className="text-sm text-surface-600">
-                    <strong>Next steps:</strong> Add categories and products from your dashboard to start receiving orders.
-                  </p>
+                  <div className="text-sm text-surface-600">
+                    <strong>Next steps:</strong>
+                    <ol className="mt-1 ml-4 list-decimal space-y-1 text-surface-500">
+                      <li>Add categories & products from your dashboard</li>
+                      <li>Set operating hours and delivery settings</li>
+                      <li>Turn on "Accepting Orders" when ready to go live</li>
+                    </ol>
+                  </div>
                 </div>
 
                 <button onClick={handleGoToDashboard} className="btn btn-primary w-full">
