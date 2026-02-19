@@ -176,6 +176,9 @@ export default function Orders() {
     onSuccess: () => {
       queryClient.invalidateQueries(['orders'])
       toast.success('Order status updated')
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.error?.message || 'Failed to update status')
     }
   })
 
@@ -219,6 +222,9 @@ export default function Orders() {
     onSuccess: () => {
       queryClient.invalidateQueries(['orders'])
       toast.success('Order rejected')
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.error?.message || 'Failed to reject order')
     }
   })
 
@@ -426,7 +432,7 @@ function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateSta
             <h3 className="font-semibold text-surface-900">#{order.orderNumber}</h3>
             <span className={clsx('badge', STATUS_COLORS[order.status])}>
               {getStatusIcon(order.status)}
-              <span className="ml-1 capitalize">{order.status.replace('_', ' ')}</span>
+              <span className="ml-1 capitalize">{order.status.replaceAll('_', ' ')}</span>
             </span>
           </div>
           <p className="text-sm text-surface-500 mt-1">
@@ -453,10 +459,11 @@ function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateSta
         </span>
         <span className={clsx(
           'px-2 py-0.5 rounded-full font-medium',
-          order.paymentStatus === 'paid' || order.paymentStatus === 'verified'
-            ? 'bg-green-50 text-green-600' : 'bg-yellow-50 text-yellow-600'
+          order.paymentStatus === 'paid' ? 'bg-green-50 text-green-600' : 
+          order.paymentStatus === 'failed' ? 'bg-red-50 text-red-600' :
+          order.paymentStatus === 'refunded' ? 'bg-blue-50 text-blue-600' : 'bg-yellow-50 text-yellow-600'
         )}>
-          {order.paymentStatus === 'paid' ? '✅ Paid' : order.paymentStatus === 'verified' ? '✅ Verified' : '⏳ Unpaid'}
+          {order.paymentStatus === 'paid' ? '✅ Paid' : order.paymentStatus === 'failed' ? '❌ Failed' : order.paymentStatus === 'refunded' ? '↩️ Refunded' : '⏳ Unpaid'}
         </span>
         {order.source === 'web_storefront' && (
           <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-600 font-medium">🌐 Web</span>
@@ -540,7 +547,7 @@ function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateSta
               onClick={() => onUpdateStatus(status)}
               className="btn btn-secondary btn-sm flex-1"
             >
-              {statusLabels[status] || `Mark ${status.replace('_', ' ')}`}
+              {statusLabels[status] || `Mark ${status.replaceAll('_', ' ')}`}
             </button>
           ))}
         </div>
@@ -610,17 +617,6 @@ function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateSta
         </div>
       )}
 
-      {order.status === 'out_for_delivery' && (
-        <div className="pt-3 border-t border-surface-100" onClick={e => e.stopPropagation()}>
-          <button 
-            onClick={() => onUpdateStatus('delivered')}
-            className="btn btn-success btn-sm w-full"
-          >
-            <CheckCircle className="w-4 h-4" />
-            Mark as Delivered
-          </button>
-        </div>
-      )}
     </div>
   )
 }
@@ -634,7 +630,7 @@ function OrderDetails({ order, onUpdateStatus, onAssignDelivery }) {
         <div className="flex items-center justify-between mb-2">
           <h3 className="font-semibold text-lg">Order #{order.orderNumber}</h3>
           <span className={clsx('badge', STATUS_COLORS[order.status])}>
-            {order.status.replace('_', ' ')}
+            {order.status.replaceAll('_', ' ')}
           </span>
         </div>
         <p className="text-sm text-surface-500">
@@ -798,6 +794,15 @@ function OrderDetails({ order, onUpdateStatus, onAssignDelivery }) {
           </div>
         )}
 
+        {/* Delivery Type */}
+        {order.deliveryType && (
+          <div className="p-2 rounded-lg bg-surface-50">
+            <span className="text-sm font-medium">
+              {order.deliveryType === 'pickup' ? '🏪 Pickup Order' : '🚚 Home Delivery'}
+            </span>
+          </div>
+        )}
+
         {/* Order Items */}
         <div>
           <h4 className="text-sm font-medium text-surface-500 mb-3">Items</h4>
@@ -807,12 +812,23 @@ function OrderDetails({ order, onUpdateStatus, onAssignDelivery }) {
                 <div>
                   <p className="font-medium text-surface-900">{item.name}</p>
                   <p className="text-sm text-surface-500">x{item.quantity}</p>
+                  {item.specialInstructions && (
+                    <p className="text-xs text-orange-600 italic mt-0.5">📝 {item.specialInstructions}</p>
+                  )}
                 </div>
                 <p className="font-medium">₹{item.totalPrice || item.price * item.quantity}</p>
               </div>
             ))}
           </div>
         </div>
+
+        {/* Special Instructions */}
+        {order.specialInstructions && (
+          <div className="p-3 rounded-xl bg-orange-50 border border-orange-100">
+            <p className="text-sm font-medium text-orange-700">📝 Special Instructions</p>
+            <p className="text-sm text-orange-800 mt-1">{order.specialInstructions}</p>
+          </div>
+        )}
 
         {/* Payment Info */}
         <div className="p-3 rounded-xl bg-surface-50 border border-surface-100">
@@ -830,11 +846,13 @@ function OrderDetails({ order, onUpdateStatus, onAssignDelivery }) {
             </div>
             <span className={clsx('badge text-xs', 
               order.paymentStatus === 'paid' ? 'bg-green-100 text-green-700' : 
-              order.paymentStatus === 'verified' ? 'bg-green-100 text-green-700' :
+              order.paymentStatus === 'failed' ? 'bg-red-100 text-red-700' :
+              order.paymentStatus === 'refunded' ? 'bg-blue-100 text-blue-700' :
               'bg-yellow-100 text-yellow-700'
             )}>
               {order.paymentStatus === 'paid' ? '✅ Paid' : 
-               order.paymentStatus === 'verified' ? '✅ Verified' : 
+               order.paymentStatus === 'failed' ? '❌ Failed' :
+               order.paymentStatus === 'refunded' ? '↩️ Refunded' :
                '⏳ Pending'}
             </span>
           </div>
@@ -852,6 +870,18 @@ function OrderDetails({ order, onUpdateStatus, onAssignDelivery }) {
               <span>₹{order.deliveryCharges}</span>
             </div>
           )}
+          {order.discount > 0 && (
+            <div className="flex justify-between text-sm text-green-600">
+              <span>Discount</span>
+              <span>-₹{order.discount}</span>
+            </div>
+          )}
+          {order.taxes > 0 && (
+            <div className="flex justify-between text-sm">
+              <span className="text-surface-500">Taxes</span>
+              <span>₹{order.taxes}</span>
+            </div>
+          )}
           <div className="flex justify-between font-semibold text-lg pt-2 border-t border-surface-100">
             <span>Total</span>
             <span className="text-primary-600">₹{order.totalAmount}</span>
@@ -867,7 +897,7 @@ function OrderDetails({ order, onUpdateStatus, onAssignDelivery }) {
                 <div key={index} className="flex gap-3">
                   <div className="w-2 h-2 rounded-full bg-primary-500 mt-2" />
                   <div>
-                    <p className="text-sm font-medium capitalize">{history.status.replace('_', ' ')}</p>
+                    <p className="text-sm font-medium capitalize">{history.status.replaceAll('_', ' ')}</p>
                     <p className="text-xs text-surface-500">
                       {format(new Date(history.timestamp), 'h:mm a')}
                     </p>
