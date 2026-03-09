@@ -77,6 +77,7 @@ export default function Orders() {
   const [rejectModal, setRejectModal] = useState(null) // { orderId, reason }
   const [editOrderModal, setEditOrderModal] = useState(null) // order object
   const [showCreateOrder, setShowCreateOrder] = useState(false)
+  const [paymentProofModalUrl, setPaymentProofModalUrl] = useState(null)
   const queryClient = useQueryClient()
   const { user } = useAuthStore()
   const merchantId = typeof user?.merchant === 'object' ? user?.merchant?._id : user?.merchant
@@ -412,6 +413,7 @@ export default function Orders() {
                 onUpdateStatus={(status) => handleStatusUpdate(order._id, status)}
                 onAssignDelivery={() => setAssignModalOrder(order)}
                 getNextStatuses={getNextStatuses}
+                onViewPaymentProof={setPaymentProofModalUrl}
               />
             ))}
             </>
@@ -426,6 +428,7 @@ export default function Orders() {
               onUpdateStatus={(status) => handleStatusUpdate(selectedOrderId, status)}
               onAssignDelivery={() => setAssignModalOrder(selectedOrder)}
               onEdit={() => setEditOrderModal(selectedOrder)}
+              onViewPaymentProof={setPaymentProofModalUrl}
             />
           ) : (
             <div className="card p-8 text-center sticky top-28">
@@ -462,6 +465,7 @@ export default function Orders() {
                   setEditOrderModal(mobileDetailOrder)
                   setMobileDetailOrderId(null)
                 }}
+                onViewPaymentProof={setPaymentProofModalUrl}
               />
             </div>
           </div>
@@ -522,6 +526,30 @@ export default function Orders() {
         />
       )}
 
+      {/* Payment Screenshot Modal */}
+      {paymentProofModalUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setPaymentProofModalUrl(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl max-w-2xl max-h-[90vh] w-full overflow-hidden">
+            <div className="absolute top-3 right-3 z-10">
+              <button
+                onClick={() => setPaymentProofModalUrl(null)}
+                className="p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 overflow-auto max-h-[90vh]">
+              {paymentProofModalUrl.match(/\.(mp4|webm|mov)(\?|$)/i) ? (
+                <video src={paymentProofModalUrl} controls className="w-full rounded-lg" />
+              ) : (
+                <img src={paymentProofModalUrl} alt="Payment screenshot" className="w-full rounded-lg" />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Create Order Modal */}
       {showCreateOrder && (
         <CreateOrderModal
@@ -535,7 +563,7 @@ export default function Orders() {
   )
 }
 
-function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateStatus, onAssignDelivery, getNextStatuses }) {
+function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateStatus, onAssignDelivery, getNextStatuses, onViewPaymentProof }) {
   const getStatusIcon = (status) => {
     switch (status) {
       case 'pending': return <Clock className="w-4 h-4" />
@@ -678,7 +706,7 @@ function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateSta
 
       {/* Assign Delivery + Next Status */}
       {canAssignDelivery && (
-        <div className="flex gap-2 pt-3 border-t border-surface-100" onClick={e => e.stopPropagation()}>
+        <div className="flex gap-2 pt-3 border-t border-surface-100 flex-wrap" onClick={e => e.stopPropagation()}>
           {!order.assignedDeliveryBoy && (
             <button 
               onClick={onAssignDelivery}
@@ -697,12 +725,19 @@ function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateSta
               {statusLabels[status] || `Mark ${status.replaceAll('_', ' ')}`}
             </button>
           ))}
+          <button 
+            onClick={(e) => { e.stopPropagation(); onUpdateStatus('cancelled') }}
+            className="btn btn-danger btn-sm"
+          >
+            <XCircle className="w-4 h-4" />
+            Cancel Order
+          </button>
         </div>
       )}
 
       {/* Out for Delivery - Show delivered/undelivered options */}
       {order.status === 'out_for_delivery' && (
-        <div className="flex gap-2 pt-3 border-t border-surface-100" onClick={e => e.stopPropagation()}>
+        <div className="flex gap-2 pt-3 border-t border-surface-100 flex-wrap" onClick={e => e.stopPropagation()}>
           <button 
             onClick={() => onUpdateStatus('delivered')}
             className="btn btn-success btn-sm flex-1"
@@ -714,6 +749,13 @@ function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateSta
             className="btn btn-error btn-sm flex-1"
           >
             ❌ Undelivered
+          </button>
+          <button 
+            onClick={(e) => { e.stopPropagation(); onUpdateStatus('cancelled') }}
+            className="btn btn-danger btn-sm flex-1"
+          >
+            <XCircle className="w-4 h-4" />
+            Cancel Order
           </button>
         </div>
       )}
@@ -727,6 +769,13 @@ function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateSta
           >
             🔄 Retry Delivery
           </button>
+          <button 
+            onClick={(e) => { e.stopPropagation(); onUpdateStatus('cancelled') }}
+            className="btn btn-danger btn-sm flex-1"
+          >
+            <XCircle className="w-4 h-4" />
+            Cancel Order
+          </button>
         </div>
       )}
 
@@ -735,13 +784,17 @@ function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateSta
         <div className="pt-3 border-t border-surface-100 space-y-2" onClick={e => e.stopPropagation()}>
           {order.paymentProof?.imageUrl ? (
             <div className="space-y-2">
-              <a href={order.paymentProof.imageUrl} target="_blank" rel="noopener noreferrer">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onViewPaymentProof?.(order.paymentProof.imageUrl) }}
+                className="block w-full text-left"
+              >
                 <img 
                   src={order.paymentProof.imageUrl} 
                   alt="Payment" 
-                  className="w-full h-24 object-cover rounded-lg border border-surface-200 hover:opacity-80"
+                  className="w-full h-24 object-cover rounded-lg border border-surface-200 hover:opacity-80 cursor-pointer"
                 />
-              </a>
+              </button>
               <button 
                 onClick={() => onUpdateStatus('verify_payment')}
                 className="btn btn-success btn-sm w-full"
@@ -755,12 +808,21 @@ function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateSta
               ⏳ Waiting for payment screenshot...
             </div>
           )}
-          <button 
-            onClick={() => onAccept()}
-            className="btn btn-secondary btn-sm w-full"
-          >
-            Accept Without Payment
-          </button>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => onAccept()}
+              className="btn btn-secondary btn-sm flex-1"
+            >
+              Accept Without Payment
+            </button>
+            <button 
+              onClick={(e) => { e.stopPropagation(); onUpdateStatus('cancelled') }}
+              className="btn btn-danger btn-sm flex-1"
+            >
+              <XCircle className="w-4 h-4" />
+              Cancel Order
+            </button>
+          </div>
         </div>
       )}
 
@@ -768,9 +830,10 @@ function OrderCard({ order, isSelected, onClick, onAccept, onReject, onUpdateSta
   )
 }
 
-function OrderDetails({ order, onUpdateStatus, onAssignDelivery, onEdit }) {
+function OrderDetails({ order, onUpdateStatus, onAssignDelivery, onEdit, onViewPaymentProof }) {
   const canAssignDelivery = ['accepted', 'preparing', 'ready'].includes(order.status)
   const canEdit = ['pending', 'payment_pending', 'accepted', 'preparing'].includes(order.status)
+  const canCancel = ['payment_pending', 'accepted', 'preparing', 'ready', 'out_for_delivery', 'undelivered'].includes(order.status)
 
   return (
     <div className="card sticky top-28 max-h-[calc(100vh-8rem)] flex flex-col overflow-hidden">
@@ -838,18 +901,17 @@ function OrderDetails({ order, onUpdateStatus, onAssignDelivery, onEdit }) {
             
             {order.paymentProof?.imageUrl ? (
               <div className="space-y-3">
-                <a 
-                  href={order.paymentProof.imageUrl} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="block"
+                <button
+                  type="button"
+                  onClick={() => onViewPaymentProof?.(order.paymentProof.imageUrl)}
+                  className="block w-full text-left"
                 >
                   <img 
                     src={order.paymentProof.imageUrl} 
                     alt="Payment Screenshot" 
                     className="w-full max-h-64 object-contain rounded-lg border border-surface-200 cursor-pointer hover:opacity-90 transition-opacity"
                   />
-                </a>
+                </button>
                 <div className="text-xs text-surface-500">
                   {order.paymentProof.uploadedAt && (
                     <p>Uploaded: {format(new Date(order.paymentProof.uploadedAt), 'MMM d, h:mm a')}</p>
@@ -1046,6 +1108,19 @@ function OrderDetails({ order, onUpdateStatus, onAssignDelivery, onEdit }) {
             <span className="text-primary-600">₹{order.totalAmount}</span>
           </div>
         </div>
+
+        {/* Cancel Order - when order arrives or needs to be cancelled */}
+        {canCancel && (
+          <div className="pt-4 border-t border-surface-100">
+            <button
+              onClick={() => onUpdateStatus('cancelled')}
+              className="w-full btn btn-danger btn-sm"
+            >
+              <XCircle className="w-4 h-4 mr-2" />
+              Cancel Order
+            </button>
+          </div>
+        )}
 
         {/* Status Timeline */}
         {order.statusHistory?.length > 0 && (

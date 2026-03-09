@@ -207,6 +207,7 @@ const ACTION_CONFIG = {
 export default function StaffOrders() {
   const [statusFilter, setStatusFilter] = useState('')
   const [selectedOrder, setSelectedOrder] = useState(null)
+  const [paymentProofModalUrl, setPaymentProofModalUrl] = useState(null)
   const { user } = useAuthStore()
   const queryClient = useQueryClient()
   const { playBell } = useOutletContext() || {}
@@ -563,11 +564,36 @@ export default function StaffOrders() {
           )}
         </div>
 
+      {/* Payment Screenshot Modal */}
+      {paymentProofModalUrl && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setPaymentProofModalUrl(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl max-w-2xl max-h-[90vh] w-full overflow-hidden">
+            <div className="absolute top-3 right-3 z-10">
+              <button
+                onClick={() => setPaymentProofModalUrl(null)}
+                className="p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 overflow-auto max-h-[90vh]">
+              {paymentProofModalUrl.match(/\.(mp4|webm|mov)(\?|$)/i) ? (
+                <video src={paymentProofModalUrl} controls className="w-full rounded-lg" />
+              ) : (
+                <img src={paymentProofModalUrl} alt="Payment screenshot" className="w-full rounded-lg" />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Order Detail Modal */}
       {selectedOrder && (
         <OrderDetailModal
           order={selectedOrder}
           onClose={() => setSelectedOrder(null)}
+          onViewPaymentProof={setPaymentProofModalUrl}
           onUpdateStatus={(status) => {
             updateStatusMutation.mutate({ orderId: selectedOrder._id, status })
             setSelectedOrder(null)
@@ -692,7 +718,7 @@ function OrderCard({ order, onSelect, onAccept, onReject, onUpdateStatus, isNew,
   )
 }
 
-function OrderDetailModal({ order, onClose, onUpdateStatus, onAccept, onReject, userRole, getNextStatusesFn }) {
+function OrderDetailModal({ order, onClose, onUpdateStatus, onAccept, onReject, userRole, getNextStatusesFn, onViewPaymentProof }) {
   const nextStatuses = getNextStatusesFn ? getNextStatusesFn(order.status, userRole) : getNextStatuses(order.status, userRole)
   const config = STATUS_CONFIG[order.status] || STATUS_CONFIG.pending
   const StatusIcon = config.icon
@@ -777,11 +803,17 @@ function OrderDetailModal({ order, onClose, onUpdateStatus, onAccept, onReject, 
           {order.paymentProof?.imageUrl && (
             <div className="bg-yellow-50 rounded-xl p-4 border border-yellow-200">
               <h3 className="text-sm font-medium text-yellow-700 mb-3">💳 Payment Screenshot</h3>
-              <img 
-                src={order.paymentProof.imageUrl} 
-                alt="Payment proof" 
-                className="w-full rounded-lg"
-              />
+              <button
+                type="button"
+                onClick={() => onViewPaymentProof?.(order.paymentProof.imageUrl)}
+                className="block w-full text-left"
+              >
+                <img 
+                  src={order.paymentProof.imageUrl} 
+                  alt="Payment proof" 
+                  className="w-full rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                />
+              </button>
               {order.paymentProof.isVerified && (
                 <div className="mt-2 flex items-center gap-2 text-green-600">
                   <CheckCircle className="w-4 h-4" />
