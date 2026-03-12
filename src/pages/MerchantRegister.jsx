@@ -361,7 +361,7 @@ export default function MerchantRegister() {
                     <label className="label">Store URL *</label>
                     <div className="flex items-center">
                       <span className="px-3 py-2.5 bg-surface-100 border border-r-0 border-surface-200 rounded-l-lg text-sm text-surface-500">
-                        tezzu.in/@
+                        tezzu.in/store/
                       </span>
                       <input
                         type="text"

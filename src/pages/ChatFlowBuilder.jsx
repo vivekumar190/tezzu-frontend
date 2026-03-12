@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   MessageCircle,
@@ -121,6 +122,8 @@ const TEMPLATE_VARIABLES = [
 // ========================================
 
 export default function ChatFlowBuilder() {
+  const { id: merchantId } = useParams()
+  const navigate = useNavigate()
   const [useCustomFlow, setUseCustomFlow] = useState(false)
   const [steps, setSteps] = useState([])
   const [autoReplies, setAutoReplies] = useState([])
@@ -132,15 +135,19 @@ export default function ChatFlowBuilder() {
   const [showVariables, setShowVariables] = useState(false)
   const queryClient = useQueryClient()
 
+  const isAdminEditing = !!merchantId
+  const apiPath = isAdminEditing ? `/merchants/${merchantId}/chat-flow` : '/merchants/me/chat-flow'
+
   // Fetch current chat flow
   const { data: savedData, isLoading, isFetched } = useQuery({
-    queryKey: ['chat-flow'],
+    queryKey: ['chat-flow', merchantId || 'me'],
     queryFn: async () => {
-      const res = await api.get('/merchants/me/chat-flow')
+      const res = await api.get(apiPath)
       return res.data.data
     },
     retry: false,
     staleTime: 0,
+    enabled: !merchantId || !!merchantId,
   })
 
   // Initialize state from saved data
@@ -171,7 +178,7 @@ export default function ChatFlowBuilder() {
 
   // Save mutation
   const saveMutation = useMutation({
-    mutationFn: (data) => api.put('/merchants/me/chat-flow', data),
+    mutationFn: (data) => api.put(apiPath, data),
     onSuccess: () => {
       toast.success('Chat flow saved!')
       setHasChanges(false)
@@ -294,8 +301,18 @@ export default function ChatFlowBuilder() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-surface-900">Chat Flow Builder</h1>
-          <p className="text-surface-500 mt-1">Customize your WhatsApp customer conversation</p>
+          {isAdminEditing && (
+            <button
+              onClick={() => navigate(`/merchants/${merchantId}`)}
+              className="text-sm text-primary-600 hover:text-primary-700 mb-2 flex items-center gap-1"
+            >
+              ← Back to {savedData?.merchantName || 'Merchant'}
+            </button>
+          )}
+          <h1 className="text-2xl font-bold text-surface-900">
+            Chat Flow Builder{isAdminEditing && savedData?.merchantName ? ` — ${savedData.merchantName}` : ''}
+          </h1>
+          <p className="text-surface-500 mt-1">Customize WhatsApp customer conversation</p>
         </div>
         <div className="flex items-center gap-3">
           {hasChanges && (

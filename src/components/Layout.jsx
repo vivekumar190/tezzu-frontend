@@ -20,6 +20,7 @@ import {
   Volume2,
   VolumeX,
   CreditCard,
+  DollarSign,
   Receipt,
   UserCircle,
   Megaphone,
@@ -35,6 +36,7 @@ import clsx from 'clsx'
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'My Shop', href: '/my-shop', icon: Store, merchantOnly: true },
+  { name: 'Earnings', href: '/earnings', icon: DollarSign, merchantOnly: true },
   { name: 'Merchants', href: '/merchants', icon: Store, adminOnly: true },
   { name: 'Orders', href: '/orders', icon: ShoppingBag },
   { name: 'Products', href: '/products', icon: Package },
@@ -132,8 +134,8 @@ export default function Layout() {
     return navigation.filter(item => {
       // Admin-only pages
       if (item.adminOnly && !isAdmin) return false
-      // Merchant-only pages  
-      if (item.merchantOnly && !isMerchantAdmin) return false
+      // Merchant-only pages (visible to both merchant_admin and admin)
+      if (item.merchantOnly && !isMerchantAdmin && !isAdmin) return false
       return true
     }) || []
   }, [userRole, isAdmin, isMerchantAdmin, _hasHydrated, user])

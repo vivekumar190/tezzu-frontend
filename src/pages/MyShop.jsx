@@ -223,8 +223,8 @@ export default function MyShop() {
           <div className="flex flex-col lg:flex-row lg:items-start gap-4 -mt-10">
             {/* Logo */}
             <div className="w-20 h-20 rounded-2xl bg-white shadow-xl flex items-center justify-center text-3xl font-bold text-primary-600 border-4 border-white flex-shrink-0">
-              {merchant?.logo ? (
-                <img src={merchant.logo} alt="" className="w-full h-full object-cover rounded-xl" />
+              {(merchant?.whatsappConfig?.profilePictureUrl || merchant?.logo) ? (
+                <img src={merchant.whatsappConfig?.profilePictureUrl || merchant.logo} alt="" className="w-full h-full object-cover rounded-xl" />
               ) : (
                 merchant?.name?.charAt(0) || 'S'
               )}
@@ -718,7 +718,7 @@ export default function MyShop() {
           {/* Flow Configuration */}
           <div className="card p-6 space-y-4">
             <h3 className="text-lg font-semibold text-surface-900">Flow Configuration</h3>
-            <p className="text-sm text-surface-500">Configure how your ordering process and chatbot conversations work.</p>
+            <p className="text-sm text-surface-500">Configure how your ordering process works.</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <button
                 onClick={() => navigate('/order-flow')}
@@ -733,19 +733,16 @@ export default function MyShop() {
                 </div>
                 <ChevronRight className="w-4 h-4 text-surface-400 group-hover:text-primary-500 transition-colors" />
               </button>
-              <button
-                onClick={() => navigate('/chat-flow')}
-                className="flex items-center gap-4 p-4 rounded-xl border border-surface-200 hover:border-primary-300 hover:bg-primary-50/50 transition-all text-left group"
-              >
-                <div className="w-10 h-10 rounded-lg bg-green-100 text-green-600 flex items-center justify-center group-hover:bg-green-200 transition-colors">
+              {/* Chat Flow: admin only — merchants see read-only hint */}
+              <div className="flex items-center gap-4 p-4 rounded-xl border border-surface-200 bg-surface-50 cursor-not-allowed opacity-90">
+                <div className="w-10 h-10 rounded-lg bg-surface-200 text-surface-500 flex items-center justify-center">
                   <MessageCircle className="w-5 h-5" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-surface-900">Chat Flow</p>
-                  <p className="text-xs text-surface-500 mt-0.5">Configure chatbot responses, menus & conversation flow</p>
+                  <p className="text-xs text-surface-500 mt-0.5">Contact admin to configure chatbot responses</p>
                 </div>
-                <ChevronRight className="w-4 h-4 text-surface-400 group-hover:text-primary-500 transition-colors" />
-              </button>
+              </div>
             </div>
           </div>
 
@@ -2718,7 +2715,8 @@ function StorefrontSettings({ merchantId, merchant }) {
   const [domainStatus, setDomainStatus] = useState(null)
   const [domainLoading, setDomainLoading] = useState(false)
 
-  const storefrontUrl = `https://tezzu.in/@${merchant?.keyword || ''}`
+  const storefrontBaseUrl = import.meta.env.VITE_STOREFRONT_URL || 'https://tezzu.in'
+  const storefrontUrl = `${storefrontBaseUrl.replace(/\/$/, '')}/store/${merchant?.keyword || ''}`
 
   const fetchQR = async (regenerate = false) => {
     setQrLoading(true)

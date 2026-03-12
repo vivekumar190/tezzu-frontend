@@ -164,7 +164,7 @@ export default function WhatsAppEmbeddedSignup({ merchantId, onSuccess, onError 
     }
   }
 
-  // Error state
+  // Error state — OAuth not available, use manual setup below
   if (sdkError) {
     return (
       <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
@@ -174,8 +174,8 @@ export default function WhatsAppEmbeddedSignup({ merchantId, onSuccess, onError 
             <p className="font-medium">Embedded Signup Not Ready</p>
             <p className="text-sm text-amber-600 mt-1">{sdkError}</p>
             <p className="text-xs text-amber-500 mt-2">
-              Complete Meta App setup: Business Verification, App Review, and create a Login Configuration
-              at developers.facebook.com to enable one-click WhatsApp onboarding.
+              Use <strong>Manual Configuration</strong> below to enter Phone Number ID and connect.
+              OAuth requires Meta App verification at developers.facebook.com.
             </p>
           </div>
         </div>

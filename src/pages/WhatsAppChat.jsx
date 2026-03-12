@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   MessageCircle, Send, Search, Phone, Bot, UserRound,
-  ShoppingCart, Loader2, ArrowLeft
+  ShoppingCart, Loader2, ArrowLeft, X, Package, MapPin,
+  Truck, CreditCard, Calendar, Bike
 } from 'lucide-react'
 import api from '../lib/api'
 import { getSocket } from '../lib/socket'
@@ -53,6 +55,7 @@ export default function WhatsAppChat() {
   const [messages, setMessages] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
   const [filterTakeover, setFilterTakeover] = useState(false)
+  const [selectedOrderId, setSelectedOrderId] = useState(null)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
 
@@ -81,6 +84,13 @@ export default function WhatsAppChat() {
     queryKey: ['whatsapp-chat-info', selectedSessionId],
     queryFn: () => api.get(`/whatsapp-chat/conversations/${selectedSessionId}/info`).then(r => r.data.data),
     enabled: !!selectedSessionId
+  })
+
+  // Fetch full order details when order is clicked
+  const { data: orderDetail, isLoading: loadingOrder } = useQuery({
+    queryKey: ['order', selectedOrderId],
+    queryFn: () => api.get(`/orders/${selectedOrderId}`).then(r => r.data.data.order),
+    enabled: !!selectedOrderId
   })
 
   // Send message
@@ -348,6 +358,33 @@ export default function WhatsAppChat() {
                   </div>
                 </div>
 
+                {/* Recent Orders (mobile - sidebar hidden) */}
+                {customerInfo?.recentOrders?.length > 0 && (
+                  <div className="lg:hidden px-4 py-2 border-b border-surface-100 bg-surface-50">
+                    <p className="text-xs font-semibold text-surface-500 mb-2">Recent Orders</p>
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      {customerInfo.recentOrders.map(order => (
+                        <button
+                          key={order._id}
+                          onClick={() => setSelectedOrderId(order._id)}
+                          className="flex-shrink-0 px-3 py-2 bg-white rounded-lg border border-surface-200 hover:border-primary-300 text-left min-w-[140px]"
+                        >
+                          <span className="text-xs font-semibold text-surface-900">#{order.orderNumber}</span>
+                          <span className={clsx(
+                            'ml-1 text-[10px] px-1.5 py-0.5 rounded font-medium',
+                            order.status === 'delivered' && 'bg-green-100 text-green-700',
+                            order.status === 'cancelled' && 'bg-red-100 text-red-700',
+                            !['delivered', 'cancelled'].includes(order.status) && 'bg-blue-100 text-blue-700'
+                          )}>
+                            {order.status}
+                          </span>
+                          <p className="text-xs text-surface-500 mt-0.5">₹{order.totalAmount}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Messages */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#e5ddd5]">
                   {loadingMessages ? (
@@ -478,7 +515,11 @@ export default function WhatsAppChat() {
                     <h4 className="text-xs font-semibold text-surface-400 uppercase tracking-wider mb-2">Recent Orders</h4>
                     <div className="space-y-2">
                       {customerInfo.recentOrders.map(order => (
-                        <div key={order._id} className="bg-white rounded-xl p-3">
+                        <button
+                          key={order._id}
+                          onClick={() => setSelectedOrderId(order._id)}
+                          className="w-full text-left bg-white rounded-xl p-3 hover:bg-surface-50 transition-colors border border-transparent hover:border-surface-200"
+                        >
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-semibold text-surface-900">#{order.orderNumber}</span>
                             <span className={clsx(
@@ -494,13 +535,238 @@ export default function WhatsAppChat() {
                             {new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                             {order.totalAmount != null && ` — ₹${order.totalAmount}`}
                           </p>
-                        </div>
+                          <p className="text-[10px] text-primary-500 mt-1">Click for details →</p>
+                        </button>
                       ))}
                     </div>
                   </div>
                 )}
               </div>
             </div>
+          )}
+        </div>
+      </div>
+
+      {/* Order Detail Modal - rendered via portal for full-screen overlay */}
+      {selectedOrderId && createPortal(
+        <OrderDetailModal
+          order={orderDetail}
+          isLoading={loadingOrder}
+          onClose={() => setSelectedOrderId(null)}
+        />,
+        document.body
+      )}
+    </div>
+  )
+}
+
+function OrderDetailModal({ order, isLoading, onClose }) {
+  const formatAddr = (addr) => {
+    if (!addr) return '—'
+    const parts = [addr.street, addr.landmark, addr.city, addr.pincode].filter(Boolean)
+    return parts.join(', ') || '—'
+  }
+
+  const statusLabels = {
+    pending: '⏳ Pending',
+    payment_pending: '💳 Payment Pending',
+    confirmed: '✅ Confirmed',
+    accepted: '✅ Accepted',
+    preparing: '👨‍🍳 Preparing',
+    ready: '🍽️ Ready',
+    out_for_delivery: '🚴 Out for Delivery',
+    delivered: '✓ Delivered',
+    undelivered: '❌ Undelivered',
+    rejected: '❌ Rejected',
+    cancelled: '❌ Cancelled'
+  }
+
+  return (
+    <div className="fixed top-0 left-0 w-full h-full z-[9999] flex items-center justify-center bg-black/50 overflow-y-auto" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col mx-4 my-4" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-surface-100 flex-shrink-0">
+          <h2 className="text-lg font-semibold text-surface-900">
+            {isLoading ? 'Loading...' : order ? `Order #${order.orderNumber}` : 'Order'}
+          </h2>
+          <button onClick={onClose} className="p-2 hover:bg-surface-100 rounded-lg">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          {isLoading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
+            </div>
+          ) : !order ? (
+            <p className="text-surface-500 text-center py-8">Order not found</p>
+          ) : (
+            <>
+              {/* Customer */}
+              <div>
+                <h4 className="text-xs font-semibold text-surface-400 uppercase tracking-wider mb-2">Customer</h4>
+                <div className="bg-surface-50 rounded-xl p-3 space-y-1">
+                  <p className="font-medium text-surface-900">{order.customerName || '—'}</p>
+                  <p className="text-sm text-surface-600 flex items-center gap-1">
+                    <Phone className="w-3.5 h-3.5" />
+                    {order.customerPhone || '—'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Order Source */}
+              <div className="flex items-center gap-2">
+                <span className={clsx(
+                  'px-2 py-1 rounded text-xs font-medium',
+                  order.source === 'web_storefront' && 'bg-purple-50 text-purple-700',
+                  order.source === 'whatsapp' && 'bg-green-50 text-green-700',
+                  ['mobile_app', 'dashboard', 'api'].includes(order.source) && 'bg-blue-50 text-blue-700'
+                )}>
+                  {order.source === 'web_storefront' && '🌐 Website Order'}
+                  {order.source === 'whatsapp' && '💬 WhatsApp Order'}
+                  {order.source === 'mobile_app' && '📱 App Order'}
+                  {order.source === 'dashboard' && '📋 Dashboard'}
+                  {order.source === 'api' && '🔗 API'}
+                  {!order.source && '💬 WhatsApp Order'}
+                </span>
+              </div>
+
+              {/* Status & Summary */}
+              <div className="flex items-center justify-between">
+                <span className={clsx(
+                  'px-3 py-1 rounded-full text-sm font-medium',
+                  ['delivered'].includes(order.status) && 'bg-green-100 text-green-700',
+                  ['cancelled', 'rejected'].includes(order.status) && 'bg-red-100 text-red-700',
+                  !['delivered', 'cancelled', 'rejected'].includes(order.status) && 'bg-blue-100 text-blue-700'
+                )}>
+                  {statusLabels[order.status] || order.status}
+                </span>
+                <span className="text-xl font-bold text-surface-900">₹{order.totalAmount}</span>
+              </div>
+
+              {/* Items */}
+              <div>
+                <h4 className="text-xs font-semibold text-surface-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <Package className="w-3.5 h-3.5" /> Items
+                </h4>
+                <div className="bg-surface-50 rounded-xl p-3 space-y-2">
+                  {order.items?.map((item, i) => (
+                    <div key={i} className="flex justify-between text-sm">
+                      <span>
+                        {item.quantity}x {item.name}
+                        {item.variants?.length > 0 && (
+                          <span className="text-surface-500 text-xs ml-1">
+                            ({item.variants.map(v => v.option).join(', ')})
+                          </span>
+                        )}
+                      </span>
+                      <span className="font-medium">₹{item.totalPrice || item.price * item.quantity}</span>
+                    </div>
+                  ))}
+                  {order.deliveryCharges > 0 && (
+                    <div className="flex justify-between text-sm pt-2 border-t border-surface-200">
+                      <span className="text-surface-500">Delivery</span>
+                      <span>₹{order.deliveryCharges}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Delivery Address */}
+              <div>
+                <h4 className="text-xs font-semibold text-surface-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <MapPin className="w-3.5 h-3.5" /> Delivery Address
+                </h4>
+                <div className="bg-surface-50 rounded-xl p-3 space-y-1.5 text-sm">
+                  <p><strong>{order.customerName || 'Customer'}</strong></p>
+                  <p className="text-surface-600">{order.customerPhone}</p>
+                  <p className="text-surface-600">{formatAddr(order.deliveryAddress)}</p>
+                  {order.specialInstructions && (
+                    <p className="text-amber-700 text-xs mt-1">Note: {order.specialInstructions}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Payment */}
+              <div>
+                <h4 className="text-xs font-semibold text-surface-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <CreditCard className="w-3.5 h-3.5" /> Payment
+                </h4>
+                <div className="flex gap-2">
+                  <span className={clsx(
+                    'px-2 py-1 rounded text-xs font-medium',
+                    (order.paymentMethod === 'online' || order.paymentMethod === 'upi')
+                      ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700'
+                  )}>
+                    {(order.paymentMethod === 'online' || order.paymentMethod === 'upi') ? '💳 Online' : '💰 COD'}
+                  </span>
+                  <span className={clsx(
+                    'px-2 py-1 rounded text-xs font-medium',
+                    order.paymentStatus === 'paid' ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700'
+                  )}>
+                    {order.paymentStatus === 'paid' ? '✅ Paid' : '⏳ Unpaid'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Delivery Boy */}
+              {order.assignedDeliveryBoy && (
+                <div>
+                  <h4 className="text-xs font-semibold text-surface-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                    <Bike className="w-3.5 h-3.5" /> Delivery Boy
+                  </h4>
+                  <div className="bg-blue-50 rounded-xl p-3 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-blue-200 flex items-center justify-center">
+                      <Bike className="w-5 h-5 text-blue-700" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-surface-900">{order.assignedDeliveryBoy.name}</p>
+                      <p className="text-sm text-surface-600">{order.assignedDeliveryBoy.phone}</p>
+                      {order.assignedAt && (
+                        <p className="text-xs text-surface-500 mt-0.5">
+                          Assigned {new Date(order.assignedAt).toLocaleString('en-IN')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Timeline */}
+              {order.statusHistory?.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-semibold text-surface-400 uppercase tracking-wider mb-2">Timeline</h4>
+                  <div className="space-y-0">
+                    {[...order.statusHistory].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).map((entry, i) => (
+                      <div key={i} className="flex gap-3 py-2 border-b border-surface-100 last:border-0">
+                        <div className="w-2 h-2 rounded-full bg-primary-500 mt-1.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-surface-900">
+                            {statusLabels[entry.status] || entry.status}
+                          </p>
+                          <p className="text-xs text-surface-500">
+                            {new Date(entry.timestamp).toLocaleString('en-IN', {
+                              day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                            })}
+                            {entry.updatedBy && ` • ${entry.updatedBy}`}
+                          </p>
+                          {entry.note && (
+                            <p className="text-xs text-surface-600 mt-0.5">{entry.note}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {order.scheduledFor && (
+                <div className="flex items-center gap-2 text-sm text-purple-700 bg-purple-50 px-3 py-2 rounded-lg">
+                  <Calendar className="w-4 h-4" />
+                  Scheduled: {new Date(order.scheduledFor).toLocaleString('en-IN')}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

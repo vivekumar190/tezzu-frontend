@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { 
   User, 
@@ -35,7 +35,11 @@ import {
   Map,
   ArrowUpRight,
   Sparkles,
-  Check
+  Check,
+  BookOpen,
+  Filter,
+  Download,
+  Search
 } from 'lucide-react'
 import api from '../lib/api'
 import toast from 'react-hot-toast'
@@ -48,7 +52,7 @@ export default function MerchantProfile() {
   const queryClient = useQueryClient()
 
   // Fetch merchant profile
-  const { data: profile, isLoading } = useQuery({
+  const { data: profile, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['merchant-profile'],
     queryFn: async () => {
       const res = await api.get('/merchants/me/profile')
@@ -63,6 +67,23 @@ export default function MerchantProfile() {
           <Loader2 className="w-10 h-10 animate-spin text-primary-500" />
           <p className="text-surface-500">Loading profile...</p>
         </div>
+      </div>
+    )
+  }
+
+  if (isError) {
+    const message = error?.response?.data?.message || error?.message || 'Failed to load profile'
+    return (
+      <div className="card p-8 text-center max-w-md mx-auto">
+        <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
+        <h3 className="text-lg font-semibold text-surface-900 mb-2">Unable to load profile</h3>
+        <p className="text-surface-500 mb-4">{message}</p>
+        <p className="text-sm text-surface-400 mb-4">
+          Profile & Billing is for merchant accounts. If you're an admin, ensure your account is linked to a merchant.
+        </p>
+        <button onClick={() => refetch()} className="btn btn-primary">
+          Try again
+        </button>
       </div>
     )
   }
@@ -89,10 +110,10 @@ export default function MerchantProfile() {
         {/* Profile Info */}
         <div className="px-6 pb-6">
           <div className="flex flex-col sm:flex-row sm:items-end gap-4 -mt-12">
-            {/* Logo */}
+            {/* Logo / WhatsApp profile picture */}
             <div className="w-24 h-24 rounded-2xl bg-white shadow-lg border-4 border-white overflow-hidden flex-shrink-0">
-              {merchant?.logo ? (
-                <img src={merchant.logo} alt={merchant.name} className="w-full h-full object-cover" />
+              {(merchant?.whatsappProfilePicture || merchant?.logo) ? (
+                <img src={merchant.whatsappProfilePicture || merchant.logo} alt={merchant.name} className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full bg-gradient-to-br from-primary-100 to-primary-200 flex items-center justify-center">
                   <Store className="w-10 h-10 text-primary-600" />
@@ -243,9 +264,9 @@ export default function MerchantProfile() {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="border-b border-surface-200">
-        <nav className="flex gap-1 overflow-x-auto pb-px">
+      {/* Tabs - prominent tab bar */}
+      <div className="card p-1 bg-surface-100 rounded-xl">
+        <nav className="flex gap-1 overflow-x-auto scrollbar-thin" role="tablist">
           {[
             { id: 'subscription', label: 'Plan & Usage', icon: Crown },
             { id: 'overview', label: 'Razorpay Status', icon: CreditCard },
@@ -254,15 +275,17 @@ export default function MerchantProfile() {
           ].map(tab => (
             <button
               key={tab.id}
+              role="tab"
+              aria-selected={activeTab === tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={clsx(
-                'flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors',
+                'flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap rounded-lg transition-all',
                 activeTab === tab.id
-                  ? 'border-primary-500 text-primary-600'
-                  : 'border-transparent text-surface-500 hover:text-surface-700 hover:border-surface-300'
+                  ? 'bg-white shadow-sm text-primary-600 border border-surface-200'
+                  : 'text-surface-600 hover:text-surface-900 hover:bg-white/50'
               )}
             >
-              <tab.icon className="w-4 h-4" />
+              <tab.icon className="w-4 h-4 flex-shrink-0" />
               {tab.label}
               {tab.badge > 0 && (
                 <span className="px-2 py-0.5 text-xs bg-amber-100 text-amber-700 rounded-full">
@@ -385,6 +408,291 @@ function RazorpayStatusTab({ merchant }) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// Ledger Tab
+function LedgerTab() {
+  const [page, setPage] = useState(1)
+  const [typeFilter, setTypeFilter] = useState('')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [showFilters, setShowFilters] = useState(false)
+  const [sortOrder, setSortOrder] = useState('-date')
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 400)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  const queryParams = new URLSearchParams()
+  if (page > 1) queryParams.set('page', page)
+  if (typeFilter) queryParams.set('type', typeFilter)
+  if (fromDate) queryParams.set('fromDate', fromDate)
+  if (toDate) queryParams.set('toDate', toDate)
+  if (debouncedSearch) queryParams.set('search', debouncedSearch)
+  if (sortOrder) queryParams.set('sort', sortOrder)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['merchant-ledger', page, typeFilter, fromDate, toDate, debouncedSearch, sortOrder],
+    queryFn: async () => {
+      const res = await api.get(`/merchants/me/ledger?${queryParams.toString()}`)
+      return res.data.data
+    }
+  })
+
+  const entries = data?.entries || []
+  const summary = data?.summary || {}
+  const pagination = data?.pagination || {}
+
+  const exportCsv = () => {
+    const headers = ['Date', 'Description', 'Type', 'Reference', 'Credit (₹)', 'Debit (₹)', 'Balance (₹)']
+    const rows = entries.map(e => [
+      new Date(e.date).toLocaleDateString(),
+      e.description,
+      e.type?.replace('_', ' '),
+      e.referenceId || '',
+      e.credit || 0,
+      e.debit || 0,
+      e.balance ?? ''
+    ])
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `ledger-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success('Ledger exported')
+  }
+
+  const getTypeBadge = (type) => {
+    const styles = {
+      order_revenue: 'bg-green-100 text-green-700',
+      platform_fee: 'bg-amber-100 text-amber-700',
+      invoice: 'bg-blue-100 text-blue-700'
+    }
+    return styles[type] || 'bg-surface-100 text-surface-600'
+  }
+
+  const clearFilters = () => {
+    setTypeFilter('')
+    setFromDate('')
+    setToDate('')
+    setSearch('')
+    setPage(1)
+  }
+
+  const hasFilters = typeFilter || fromDate || toDate || search || debouncedSearch
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="card p-4">
+          <p className="text-sm text-surface-500 mb-1">Total Credits</p>
+          <p className="text-xl font-bold text-green-600">₹{summary.totalCredits?.toLocaleString('en-IN') || 0}</p>
+        </div>
+        <div className="card p-4">
+          <p className="text-sm text-surface-500 mb-1">Total Debits</p>
+          <p className="text-xl font-bold text-red-600">₹{summary.totalDebits?.toLocaleString('en-IN') || 0}</p>
+        </div>
+        <div className="card p-4">
+          <p className="text-sm text-surface-500 mb-1">Net Balance</p>
+          <p className={clsx(
+            'text-xl font-bold',
+            (summary.netBalance || 0) >= 0 ? 'text-surface-900' : 'text-red-600'
+          )}>
+            ₹{(summary.netBalance || 0).toLocaleString('en-IN')}
+          </p>
+        </div>
+      </div>
+
+      {/* Filters & Actions */}
+      <div className="card p-4">
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex-1 relative">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-surface-400" />
+            <input
+              type="text"
+              placeholder="Search by description or reference..."
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+              className="input pl-10 w-full"
+            />
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={clsx(
+                'btn btn-outline btn-sm flex items-center gap-2',
+                showFilters && 'bg-surface-100'
+              )}
+            >
+              <Filter className="w-4 h-4" />
+              Filters
+              {hasFilters && (
+                <span className="w-2 h-2 rounded-full bg-primary-500" />
+              )}
+            </button>
+            <button onClick={exportCsv} className="btn btn-outline btn-sm flex items-center gap-2">
+              <Download className="w-4 h-4" />
+              Export CSV
+            </button>
+            {hasFilters && (
+              <button onClick={clearFilters} className="btn btn-ghost btn-sm text-surface-500">
+                Clear filters
+              </button>
+            )}
+          </div>
+        </div>
+
+        {showFilters && (
+          <div className="mt-4 pt-4 border-t border-surface-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-surface-500 mb-1">Type</label>
+              <select
+                value={typeFilter}
+                onChange={(e) => { setTypeFilter(e.target.value); setPage(1) }}
+                className="input w-full"
+              >
+                <option value="">All types</option>
+                <option value="order">Order Revenue</option>
+                <option value="platform_fee">Platform Fee</option>
+                <option value="invoice">Invoice</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-surface-500 mb-1">From Date</label>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => { setFromDate(e.target.value); setPage(1) }}
+                className="input w-full"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-surface-500 mb-1">To Date</label>
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => { setToDate(e.target.value); setPage(1) }}
+                className="input w-full"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-surface-500 mb-1">Sort</label>
+              <select
+                value={sortOrder}
+                onChange={(e) => { setSortOrder(e.target.value); setPage(1) }}
+                className="input w-full"
+              >
+                <option value="-date">Newest first</option>
+                <option value="date">Oldest first</option>
+              </select>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Ledger Table */}
+      <div className="card overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-surface-200 bg-surface-50">
+                <th className="text-left py-3 px-4 text-xs font-semibold text-surface-500 uppercase tracking-wider">Date</th>
+                <th className="text-left py-3 px-4 text-xs font-semibold text-surface-500 uppercase tracking-wider">Description</th>
+                <th className="text-left py-3 px-4 text-xs font-semibold text-surface-500 uppercase tracking-wider">Type</th>
+                <th className="text-left py-3 px-4 text-xs font-semibold text-surface-500 uppercase tracking-wider">Reference</th>
+                <th className="text-right py-3 px-4 text-xs font-semibold text-surface-500 uppercase tracking-wider">Credit (₹)</th>
+                <th className="text-right py-3 px-4 text-xs font-semibold text-surface-500 uppercase tracking-wider">Debit (₹)</th>
+                <th className="text-right py-3 px-4 text-xs font-semibold text-surface-500 uppercase tracking-wider">Balance (₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-surface-500">
+                    <BookOpen className="w-12 h-12 mx-auto mb-3 text-surface-300" />
+                    <p className="font-medium">No ledger entries found</p>
+                    <p className="text-sm mt-1">Your financial transactions will appear here</p>
+                  </td>
+                </tr>
+              ) : (
+                entries.map((entry) => (
+                  <tr key={entry._id} className="border-b border-surface-100 hover:bg-surface-50 transition-colors">
+                    <td className="py-3 px-4 text-sm text-surface-700 whitespace-nowrap">
+                      {new Date(entry.date).toLocaleDateString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric'
+                      })}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-surface-900">{entry.description}</td>
+                    <td className="py-3 px-4">
+                      <span className={clsx('px-2 py-0.5 rounded-full text-xs font-medium capitalize', getTypeBadge(entry.type))}>
+                        {entry.type?.replace(/_/g, ' ')}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-sm text-surface-600 font-mono">{entry.referenceId || '-'}</td>
+                    <td className="py-3 px-4 text-sm text-right font-medium text-green-600">
+                      {entry.credit ? `₹${entry.credit.toLocaleString('en-IN')}` : '-'}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-right font-medium text-red-600">
+                      {entry.debit ? `₹${entry.debit.toLocaleString('en-IN')}` : '-'}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-right font-medium text-surface-700">
+                      {entry.balance != null ? `₹${entry.balance.toLocaleString('en-IN')}` : '-'}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination */}
+        {pagination.pages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-surface-200 bg-surface-50">
+            <p className="text-sm text-surface-500">
+              Showing {(pagination.page - 1) * pagination.limit + 1} to{' '}
+              {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} entries
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={pagination.page <= 1}
+                className="btn btn-ghost btn-sm"
+              >
+                Previous
+              </button>
+              <span className="text-sm text-surface-600">
+                Page {pagination.page} of {pagination.pages}
+              </span>
+              <button
+                onClick={() => setPage(p => Math.min(pagination.pages, p + 1))}
+                disabled={pagination.page >= pagination.pages}
+                className="btn btn-ghost btn-sm"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

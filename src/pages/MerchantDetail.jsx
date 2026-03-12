@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { 
   ArrowLeft, 
@@ -42,13 +42,25 @@ import toast from 'react-hot-toast'
 import api from '../lib/api'
 import clsx from 'clsx'
 import WhatsAppEmbeddedSignup from '../components/WhatsAppEmbeddedSignup'
+import { useAuthStore } from '../store/authStore'
 
 export default function MerchantDetail() {
+  const { user } = useAuthStore()
+  const isAdmin = user?.role === 'admin'
   const { id } = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab')
   const [activeTab, setActiveTab] = useState('menu')
+
+  useEffect(() => {
+    if (tabParam && ['menu', 'orders', 'location', 'settings', 'chat-flow'].includes(tabParam)) {
+      setActiveTab(tabParam)
+    }
+  }, [tabParam])
   const [showCategoryModal, setShowCategoryModal] = useState(false)
   const [showProductModal, setShowProductModal] = useState(false)
+  const [showEditMerchantModal, setShowEditMerchantModal] = useState(false)
   const [editingCategory, setEditingCategory] = useState(null)
   const [editingProduct, setEditingProduct] = useState(null)
   const queryClient = useQueryClient()
@@ -135,8 +147,12 @@ export default function MerchantDetail() {
         
         <div className="flex-1">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-2xl font-bold text-white">
-              {merchant.name.charAt(0)}
+            <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-2xl font-bold text-white overflow-hidden">
+              {(merchant.whatsappConfig?.profilePictureUrl || merchant.logo) ? (
+                <img src={merchant.whatsappConfig?.profilePictureUrl || merchant.logo} alt={merchant.name} className="w-full h-full object-cover" />
+              ) : (
+                merchant.name.charAt(0)
+              )}
             </div>
             <div>
               <h1 className="text-2xl font-display font-bold text-surface-900">{merchant.name}</h1>
@@ -153,6 +169,15 @@ export default function MerchantDetail() {
                 <MessageCircle className="w-3 h-3" />
                 Standalone
               </span>
+            )}
+            {isAdmin && (
+              <button
+                onClick={() => setShowEditMerchantModal(true)}
+                className="ml-auto btn btn-secondary btn-sm flex items-center gap-2"
+              >
+                <Edit className="w-4 h-4" />
+                Edit Merchant
+              </button>
             )}
           </div>
         </div>
@@ -231,7 +256,8 @@ export default function MerchantDetail() {
             { id: 'menu', label: 'Menu', icon: null },
             { id: 'orders', label: 'Orders', icon: null },
             { id: 'location', label: 'Location', icon: MapPin },
-            { id: 'settings', label: 'WhatsApp & Catalog', icon: MessageCircle }
+            { id: 'settings', label: 'WhatsApp & Catalog', icon: MessageCircle },
+            ...(isAdmin ? [{ id: 'chat-flow', label: 'Chat Flow', icon: MessageCircle }] : [])
           ].map((tab) => (
             <button
               key={tab.id}
@@ -419,6 +445,20 @@ export default function MerchantDetail() {
         <StandaloneSettings merchant={merchant} merchantId={id} />
       )}
 
+      {activeTab === 'chat-flow' && (
+        <div className="card p-6">
+          <h3 className="text-lg font-semibold text-surface-900 mb-2">Chat Flow</h3>
+          <p className="text-surface-500 mb-4">Configure chatbot responses, menus & conversation flow for this merchant.</p>
+          <button
+            onClick={() => navigate(`/merchants/${id}/chat-flow`)}
+            className="btn btn-primary"
+          >
+            <MessageCircle className="w-4 h-4" />
+            Edit Chat Flow
+          </button>
+        </div>
+      )}
+
       {/* Category Modal */}
       {showCategoryModal && (
         <CategoryModal
@@ -440,6 +480,18 @@ export default function MerchantDetail() {
           onClose={() => {
             setShowProductModal(false)
             setEditingProduct(null)
+          }}
+        />
+      )}
+
+      {/* Edit Merchant Modal (admin) */}
+      {showEditMerchantModal && merchant && (
+        <AdminEditMerchantModal
+          merchant={merchant}
+          onClose={() => setShowEditMerchantModal(false)}
+          onSuccess={() => {
+            queryClient.invalidateQueries(['merchant', id])
+            setShowEditMerchantModal(false)
           }}
         />
       )}
@@ -813,6 +865,141 @@ function ProductModal({ merchantId, categories, product, onClose }) {
   )
 }
 
+// Admin: Edit merchant crucial details (working hours, min order, delivery, etc.)
+function AdminEditMerchantModal({ merchant, onClose, onSuccess }) {
+  const [formData, setFormData] = useState({
+    name: merchant?.name || '',
+    description: merchant?.description || '',
+    minimumOrderAmount: merchant?.minimumOrderAmount || 0,
+    deliveryCharges: merchant?.deliveryCharges || 0,
+    averageDeliveryTime: merchant?.averageDeliveryTime || 30,
+    operatingHours: {
+      open: merchant?.operatingHours?.open || '09:00',
+      close: merchant?.operatingHours?.close || '22:00'
+    }
+  })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setIsSubmitting(true)
+    try {
+      await api.put(`/merchants/${merchant._id}`, {
+        name: formData.name,
+        description: formData.description,
+        minimumOrderAmount: Number(formData.minimumOrderAmount),
+        deliveryCharges: Number(formData.deliveryCharges),
+        averageDeliveryTime: Number(formData.averageDeliveryTime),
+        operatingHours: formData.operatingHours
+      })
+      toast.success('Merchant updated successfully')
+      onSuccess()
+    } catch (err) {
+      toast.error(err.response?.data?.error?.message || 'Failed to update')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in">
+      <div className="card w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="p-6 border-b border-surface-100 flex justify-between items-center">
+          <h2 className="text-xl font-semibold">Edit Merchant</h2>
+          <button onClick={onClose} className="p-2 hover:bg-surface-100 rounded-lg">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className="label">Business Name</label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="input"
+              required
+            />
+          </div>
+          <div>
+            <label className="label">Description</label>
+            <textarea
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              className="input"
+              rows={2}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Min. Order (₹)</label>
+              <input
+                type="number"
+                value={formData.minimumOrderAmount}
+                onChange={(e) => setFormData({ ...formData, minimumOrderAmount: e.target.value })}
+                className="input"
+                min={0}
+              />
+            </div>
+            <div>
+              <label className="label">Delivery Charges (₹)</label>
+              <input
+                type="number"
+                value={formData.deliveryCharges}
+                onChange={(e) => setFormData({ ...formData, deliveryCharges: e.target.value })}
+                className="input"
+                min={0}
+              />
+            </div>
+            <div>
+              <label className="label">Avg. Delivery Time (min)</label>
+              <input
+                type="number"
+                value={formData.averageDeliveryTime}
+                onChange={(e) => setFormData({ ...formData, averageDeliveryTime: e.target.value })}
+                className="input"
+                min={1}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Opening Time</label>
+              <input
+                type="time"
+                value={formData.operatingHours?.open || '09:00'}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  operatingHours: { ...formData.operatingHours, open: e.target.value }
+                })}
+                className="input"
+              />
+            </div>
+            <div>
+              <label className="label">Closing Time</label>
+              <input
+                type="time"
+                value={formData.operatingHours?.close || '22:00'}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  operatingHours: { ...formData.operatingHours, close: e.target.value }
+                })}
+                className="input"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-4">
+            <button type="button" onClick={onClose} className="btn btn-secondary">Cancel</button>
+            <button type="submit" disabled={isSubmitting} className="btn btn-primary">
+              {isSubmitting ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ========================================
 // STANDALONE MERCHANT SETTINGS COMPONENT
 // ========================================
@@ -842,6 +1029,13 @@ function StandaloneSettings({ merchant, merchantId }) {
     },
     enabled: !!merchantId
   })
+
+  // Auto-expand manual config when not verified (OAuth often unavailable for unverified apps)
+  useEffect(() => {
+    if (whatsappStatus && !whatsappStatus?.whatsappConfig?.isVerified) {
+      setShowManualConfig(true)
+    }
+  }, [whatsappStatus?.whatsappConfig?.isVerified])
 
   // Get catalog status
   const { data: catalogStatus, refetch: refetchCatalog } = useQuery({
@@ -1185,8 +1379,7 @@ function StandaloneSettings({ merchant, merchantId }) {
 
               <div>
                 <label className="label">
-                  WhatsApp Business Account ID (WABA)
-                  <span className="text-surface-400 font-normal ml-1">(optional)</span>
+                  WhatsApp Business Account ID (WABA) *
                 </label>
                 <input
                   type="text"
@@ -1196,7 +1389,7 @@ function StandaloneSettings({ merchant, merchantId }) {
                   placeholder="WABA ID for messaging"
                 />
                 <p className="text-xs text-surface-400 mt-1">
-                  WhatsApp Business Account ID — used for messaging APIs
+                  Required for webhooks (receive messages), templates & billing. Meta Business Suite → WhatsApp → Account → Business Account ID
                 </p>
               </div>
 
@@ -1239,7 +1432,7 @@ function StandaloneSettings({ merchant, merchantId }) {
             <div className="flex gap-3 mt-6">
               <button
                 onClick={handleSave}
-                disabled={isSaving || !config.phoneNumberId}
+                disabled={isSaving || !config.phoneNumberId || !config.businessAccountId}
                 className="btn btn-primary flex items-center gap-2"
               >
                 {isSaving ? (
@@ -1257,7 +1450,7 @@ function StandaloneSettings({ merchant, merchantId }) {
 
               <button
                 onClick={handleVerify}
-                disabled={isVerifying || !config.phoneNumberId}
+                disabled={isVerifying || !config.phoneNumberId || !config.businessAccountId}
                 className="btn btn-secondary flex items-center gap-2"
               >
                 {isVerifying ? (

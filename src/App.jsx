@@ -27,6 +27,7 @@ import ChatFlowBuilder from './pages/ChatFlowBuilder'
 import RazorpayAdmin from './pages/RazorpayAdmin'
 import BillingAdmin from './pages/BillingAdmin'
 import MerchantProfile from './pages/MerchantProfile'
+import Earnings from './pages/Earnings'
 import Campaigns from './pages/Campaigns'
 import CampaignTemplates from './pages/CampaignTemplates'
 import MerchantRegister from './pages/MerchantRegister'
@@ -140,7 +141,9 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="merchants" element={<Merchants />} />
           <Route path="merchants/:id" element={<MerchantDetail />} />
+          <Route path="merchants/:id/chat-flow" element={<ChatFlowBuilder />} />
           <Route path="my-shop" element={<MyShop />} />
+          <Route path="earnings" element={<Earnings />} />
           <Route path="orders" element={<Orders />} />
           <Route path="products" element={<Products />} />
           <Route path="staff-management" element={<Staff />} />

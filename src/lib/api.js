@@ -15,14 +15,19 @@ const api = axios.create({
 // Request interceptor - always get fresh token from sessionStorage
 api.interceptors.request.use(
   (config) => {
-    // Get token from sessionStorage on every request (tab-isolated)
+    // Get token from sessionStorage (zustand persist format: { state: { token, user }, version })
     try {
       const authData = sessionStorage.getItem('powermerchant-auth')
       if (authData) {
-        const { state } = JSON.parse(authData)
-        if (state?.token) {
-          config.headers.Authorization = `Bearer ${state.token}`
+        const parsed = JSON.parse(authData)
+        const token = parsed?.state?.token ?? parsed?.token
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`
         }
+      }
+      // Fallback: use axios default header (set by auth store on login)
+      if (!config.headers.Authorization && api.defaults.headers?.common?.Authorization) {
+        config.headers.Authorization = api.defaults.headers.common.Authorization
       }
     } catch (e) {
       // Ignore parse errors
@@ -34,31 +39,37 @@ api.interceptors.request.use(
   }
 )
 
+// Errors that are expected/normal - don't show full error toast
+const SILENT_ERRORS = [
+  'No custom domain configured',
+  'No custom domain'
+]
+
 // Response interceptor
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     // Safely extract error message as a string
     let message = 'Something went wrong'
-    
-    if (error.response?.data?.error?.message) {
-      const errorMsg = error.response.data.error.message
-      // Ensure message is a string
-      message = typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg)
+    const dataError = error.response?.data?.error
+
+    if (dataError?.message) {
+      message = typeof dataError.message === 'string' ? dataError.message : JSON.stringify(dataError.message)
+    } else if (typeof dataError === 'string') {
+      message = dataError
     } else if (error.response?.data?.message) {
-      // Handle flat error structure (e.g., plan limit errors)
       message = error.response.data.message
     } else if (typeof error.message === 'string') {
       message = error.message
     }
-    
-    // Don't show toast for auth check failures, network errors, or plan limit errors
-    // Plan limit errors should be handled by the component for better UX
+
+    // Don't show toast for auth check, network errors, plan limit, or expected/silent errors
     const isAuthCheck = error.config?.url === '/auth/me'
     const isNetworkError = !error.response
-    const isPlanLimitError = error.response?.data?.error === 'PLAN_LIMIT_REACHED'
-    
-    if (!isAuthCheck && !isNetworkError && !isPlanLimitError) {
+    const isPlanLimitError = dataError === 'PLAN_LIMIT_REACHED'
+    const isSilentError = SILENT_ERRORS.some(s => message?.includes?.(s))
+
+    if (!isAuthCheck && !isNetworkError && !isPlanLimitError && !isSilentError) {
       toast.error(message)
     }
 

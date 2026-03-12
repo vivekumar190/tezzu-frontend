@@ -170,8 +170,8 @@ function MerchantCard({ merchant, onToggleStatus, onDelete, onEdit }) {
         {/* Logo & Status */}
         <div className="flex items-start justify-between mb-4">
           <div className="w-16 h-16 rounded-xl bg-white shadow-lg flex items-center justify-center text-2xl font-bold text-primary-600 border-2 border-white">
-            {merchant.logo ? (
-              <img src={merchant.logo} alt="" className="w-full h-full object-cover rounded-xl" />
+            {(merchant.whatsappConfig?.profilePictureUrl || merchant.logo) ? (
+              <img src={merchant.whatsappConfig?.profilePictureUrl || merchant.logo} alt="" className="w-full h-full object-cover rounded-xl" />
             ) : (
               merchant.name.charAt(0)
             )}
@@ -332,6 +332,11 @@ function MerchantModal({ merchant, onClose }) {
     city: merchant?.address?.city || '',
     minimumOrderAmount: merchant?.minimumOrderAmount || 0,
     deliveryCharges: merchant?.deliveryCharges || 0,
+    averageDeliveryTime: merchant?.averageDeliveryTime || 30,
+    operatingHours: {
+      open: merchant?.operatingHours?.open || '09:00',
+      close: merchant?.operatingHours?.close || '22:00'
+    },
     // Standalone merchant fields
     isStandalone: merchant?.isStandalone || false,
     whatsappConfig: {
@@ -353,6 +358,8 @@ function MerchantModal({ merchant, onClose }) {
       const payload = {
         ...formData,
         address: { city: formData.city },
+        operatingHours: formData.operatingHours,
+        averageDeliveryTime: Number(formData.averageDeliveryTime),
         // Only include whatsappConfig if standalone is enabled
         whatsappConfig: formData.isStandalone ? formData.whatsappConfig : undefined
       }
@@ -477,6 +484,44 @@ function MerchantModal({ merchant, onClose }) {
                 className="input"
                 min={0}
               />
+            </div>
+
+            <div>
+              <label className="label">Avg. Delivery Time (min)</label>
+              <input
+                type="number"
+                value={formData.averageDeliveryTime}
+                onChange={(e) => setFormData({ ...formData, averageDeliveryTime: Number(e.target.value) })}
+                className="input"
+                min={1}
+              />
+            </div>
+
+            <div className="col-span-2 grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">Opening Time</label>
+                <input
+                  type="time"
+                  value={formData.operatingHours?.open || '09:00'}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    operatingHours: { ...formData.operatingHours, open: e.target.value }
+                  })}
+                  className="input"
+                />
+              </div>
+              <div>
+                <label className="label">Closing Time</label>
+                <input
+                  type="time"
+                  value={formData.operatingHours?.close || '22:00'}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    operatingHours: { ...formData.operatingHours, close: e.target.value }
+                  })}
+                  className="input"
+                />
+              </div>
             </div>
           </div>
 

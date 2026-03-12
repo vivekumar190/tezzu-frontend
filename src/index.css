@@ -46,6 +46,14 @@
     @apply bg-red-500 text-white hover:bg-red-600 focus:ring-red-500;
   }
 
+  .btn-success {
+    @apply bg-green-500 text-white hover:bg-green-600 focus:ring-green-500;
+  }
+
+  .btn-error {
+    @apply bg-red-500 text-white hover:bg-red-600 focus:ring-red-500;
+  }
+
   .btn-ghost {
     @apply bg-transparent text-surface-600 hover:bg-surface-100 focus:ring-surface-300;
   }
@@ -166,5 +174,24 @@
 
 .marker-pulse {
   animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+/* Order status animations */
+@keyframes cooking-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+@keyframes truck-move {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(4px); }
+}
+
+.animate-cooking-bounce {
+  animation: cooking-bounce 0.6s ease-in-out infinite;
+}
+
+.animate-truck-move {
+  animation: truck-move 1s ease-in-out infinite;
 }
 
