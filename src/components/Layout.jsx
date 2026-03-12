@@ -120,7 +120,9 @@ export default function Layout() {
   const userRole = user?.role || null
   const isAdmin = userRole === 'admin'
   const isMerchantAdmin = userRole === 'merchant_admin'
-  
+  const merchantId = typeof user?.merchant === 'object' ? user?.merchant?._id : user?.merchant
+  const hasNoShopAssigned = isMerchantAdmin && !merchantId
+
   // Filter navigation items based on role - always return an array
   const filteredNavigation = useMemo(() => {
     // Safety check - navigation should always be an array
@@ -132,10 +134,10 @@ export default function Layout() {
     }
     
     return navigation.filter(item => {
-      // Admin-only pages
+      // Admin-only pages (hidden from merchant_admin)
       if (item.adminOnly && !isAdmin) return false
-      // Merchant-only pages (visible to both merchant_admin and admin)
-      if (item.merchantOnly && !isMerchantAdmin && !isAdmin) return false
+      // Merchant-only pages (visible ONLY to merchant_admin, NOT to admin)
+      if (item.merchantOnly && !isMerchantAdmin) return false
       return true
     }) || []
   }, [userRole, isAdmin, isMerchantAdmin, _hasHydrated, user])
@@ -298,6 +300,40 @@ export default function Layout() {
   const handleLogout = async () => {
     await logout()
     navigate('/login')
+  }
+
+  // Merchant admin with no shop assigned: show full-page message, no sidebar/tabs
+  if (hasNoShopAssigned) {
+    return (
+      <div className="min-h-screen bg-surface-50 flex flex-col">
+        <header className="h-16 bg-white border-b border-surface-100 flex items-center justify-between px-6">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center">
+              <MessageCircle className="w-5 h-5 text-white" />
+            </div>
+            <span className="font-display font-bold text-lg gradient-text">Tezzu</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-surface-500 truncate max-w-[180px]">{user?.name}</span>
+            <button
+              onClick={handleLogout}
+              className="p-2 text-surface-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+              title="Logout"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
+        </header>
+        <main className="flex-1 flex items-center justify-center p-6">
+          <div className="text-center max-w-md">
+            <Store className="w-20 h-20 mx-auto mb-6 text-surface-300" />
+            <h1 className="text-2xl font-semibold text-surface-900">No Shop Assigned</h1>
+            <p className="text-surface-500 mt-3">Contact admin to assign you to a shop.</p>
+            <p className="text-sm text-surface-400 mt-2">You won&apos;t be able to access orders, products, or other features until a shop is assigned to your account.</p>
+          </div>
+        </main>
+      </div>
+    )
   }
 
   return (
