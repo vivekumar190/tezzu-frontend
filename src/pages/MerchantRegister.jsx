@@ -76,6 +76,7 @@ export default function MerchantRegister() {
         setOtpTimer(60)
         if (data.otp) {
           setDevOtp(data.otp)
+          toast.success(`OTP: ${data.otp}`, { duration: 15000 })
         }
         setTimeout(() => otpRefs.current[0]?.focus(), 100)
       } else {
