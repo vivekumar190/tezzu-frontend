@@ -32,6 +32,7 @@ export default function MerchantRegister() {
   const [merchantData, setMerchantData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [devOtp, setDevOtp] = useState(null)
 
   useEffect(() => {
     if (otpTimer > 0) {
@@ -74,7 +75,7 @@ export default function MerchantRegister() {
         setStep(2)
         setOtpTimer(60)
         if (data.otp) {
-          toast.success(`OTP: ${data.otp}`, { duration: 10000 })
+          setDevOtp(data.otp)
         }
         setTimeout(() => otpRefs.current[0]?.focus(), 100)
       } else {
@@ -284,6 +285,13 @@ export default function MerchantRegister() {
                   <h2 className="text-2xl font-display font-bold text-surface-900">Verify OTP</h2>
                   <p className="text-surface-500 mt-1">Enter the 6-digit code sent to {phone}</p>
                 </div>
+
+                {devOtp && (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-center">
+                    <p className="text-xs text-amber-600 font-medium uppercase tracking-wide mb-1">Dev Mode — OTP</p>
+                    <p className="text-3xl font-mono font-bold text-amber-800 tracking-[0.3em]">{devOtp}</p>
+                  </div>
+                )}
 
                 <div className="flex justify-center gap-3">
                   {otp.map((digit, i) => (
