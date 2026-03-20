@@ -58,6 +58,7 @@ import toast from 'react-hot-toast'
 import api from '../lib/api'
 import clsx from 'clsx'
 import { useAuthStore } from '../store/authStore'
+import CatalogSync from '../components/CatalogSync'
 
 export default function MyShop() {
   const { user } = useAuthStore()
@@ -459,6 +460,7 @@ export default function MyShop() {
         <nav className="flex gap-8 overflow-x-auto">
           {[
             { id: 'menu', label: 'Menu & Products', icon: Package },
+            { id: 'catalog', label: 'Catalog', icon: ShoppingBag },
             { id: 'storefront', label: 'Storefront & QR', icon: QrCode },
             { id: 'location', label: 'Location & Zones', icon: MapPin },
             { id: 'settings', label: 'Settings', icon: Settings },
@@ -662,6 +664,10 @@ export default function MyShop() {
             </div>
           )}
         </div>
+      )}
+
+      {activeTab === 'catalog' && merchantId && (
+        <CatalogSync merchantId={merchantId} merchantName={merchant?.name} />
       )}
 
       {activeTab === 'storefront' && (

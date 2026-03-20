@@ -588,7 +588,7 @@ function AllMerchantsSyncPanel() {
 // Main CatalogSync Component
 export default function CatalogSync({ merchantId, merchantName, compact = false }) {
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin' || user?.role === 'merchant_admin';
   const queryClient = useQueryClient();
 
   const { data: catalogStatus, refetch: refetchStatus } = useQuery({

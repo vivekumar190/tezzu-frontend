@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { MessageCircle, ArrowLeft, ArrowRight, Loader2, Phone, Store, MapPin, CheckCircle } from 'lucide-react'
+import { MessageCircle, ArrowLeft, ArrowRight, Loader2, Phone, Store, MapPin, CheckCircle, Eye, EyeOff, Lock, Mail } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import WhatsAppEmbeddedSignup from '../components/WhatsAppEmbeddedSignup'
 import toast from 'react-hot-toast'
@@ -11,7 +11,7 @@ const API_URL = import.meta.env.VITE_API_URL || ''
 export default function MerchantRegister() {
   const navigate = useNavigate()
   const { isAuthenticated } = useAuthStore()
-  const [step, setStep] = useState(1) // 1=phone, 2=otp, 3=business, 4=whatsapp, 5=done
+  const [step, setStep] = useState(1) // 1=phone, 2=otp, 3=business, 4=verify email, 5=whatsapp, 6=done
 
   // Step 1 & 2: Phone + OTP
   const [phone, setPhone] = useState('')
@@ -27,6 +27,15 @@ export default function MerchantRegister() {
   const [address, setAddress] = useState({ street: '', city: '', state: '', pincode: '' })
   const [cuisineType, setCuisineType] = useState('')
   const [description, setDescription] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+
+  // Step 4: Email verification
+  const [emailOtp, setEmailOtp] = useState(['', '', '', '', '', ''])
+  const [emailOtpTimer, setEmailOtpTimer] = useState(0)
+  const emailOtpRefs = useRef([])
+  const [devEmailOtp, setDevEmailOtp] = useState(null)
 
   // Auth state after registration
   const [merchantData, setMerchantData] = useState(null)
@@ -40,6 +49,13 @@ export default function MerchantRegister() {
       return () => clearInterval(interval)
     }
   }, [otpTimer])
+
+  useEffect(() => {
+    if (emailOtpTimer > 0) {
+      const interval = setInterval(() => setEmailOtpTimer(t => t - 1), 1000)
+      return () => clearInterval(interval)
+    }
+  }, [emailOtpTimer])
 
   // Auto-generate keyword from business name
   useEffect(() => {
@@ -105,13 +121,67 @@ export default function MerchantRegister() {
     }
   }
 
-  // Step 2 -> 3: OTP entered, move to business details
-  const handleOtpNext = () => {
+  // Email OTP input handling
+  const handleEmailOtpChange = (index, value) => {
+    if (value.length > 1) value = value[value.length - 1]
+    if (value && !/\d/.test(value)) return
+    const newOtp = [...emailOtp]
+    newOtp[index] = value
+    setEmailOtp(newOtp)
+    if (value && index < 5) emailOtpRefs.current[index + 1]?.focus()
+  }
+
+  const handleEmailOtpKeyDown = (index, e) => {
+    if (e.key === 'Backspace' && !emailOtp[index] && index > 0) {
+      emailOtpRefs.current[index - 1]?.focus()
+    }
+  }
+
+  // Step 2 -> check if already registered, then resume or go to step 3
+  const handleOtpNext = async () => {
     if (otp.join('').length !== 6) {
       setError('Please enter the complete 6-digit OTP')
       return
     }
     setError('')
+    setLoading(true)
+
+    try {
+      const res = await fetch(`${API_URL}/api/auth/check-registration`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: normalizePhone(phone) }),
+      })
+      const data = await res.json()
+
+      if (data.success && data.registered && data.data) {
+        const { user, accessToken, merchant } = data.data
+        setMerchantData(merchant)
+
+        useAuthStore.setState({
+          user,
+          token: accessToken,
+          isAuthenticated: true,
+          isLoading: false,
+          _hasHydrated: true,
+        })
+        api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`
+
+        if (data.hasWhatsApp) {
+          toast.success(`Welcome back, ${user.name}!`)
+          setStep(6)
+        } else {
+          toast.success('Welcome back! Complete your WhatsApp setup.')
+          setStep(5)
+        }
+        return
+      }
+    } catch {
+      // Not registered — continue to step 3
+    } finally {
+      setLoading(false)
+    }
+
     setStep(3)
   }
 
@@ -120,6 +190,9 @@ export default function MerchantRegister() {
     if (!businessName.trim()) { setError('Business name is required'); return }
     if (!ownerName.trim()) { setError('Your name is required'); return }
     if (!keyword.trim()) { setError('Store URL is required'); return }
+    if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) { setError('A valid email address is required'); return }
+    if (!password || password.length < 6) { setError('Password must be at least 6 characters'); return }
+    if (password !== confirmPassword) { setError('Passwords do not match'); return }
 
     setLoading(true)
     setError('')
@@ -130,7 +203,8 @@ export default function MerchantRegister() {
         name: businessName,
         ownerName,
         keyword: keyword.toLowerCase().replace(/[^a-z0-9-]/g, ''),
-        email: email || undefined,
+        email,
+        password,
         address,
         cuisineType: cuisineType || undefined,
         description: description || undefined,
@@ -140,7 +214,6 @@ export default function MerchantRegister() {
         const { user, accessToken, merchant } = res.data.data
         setMerchantData(merchant)
 
-        // Log the user in
         useAuthStore.setState({
           user,
           token: accessToken,
@@ -150,8 +223,10 @@ export default function MerchantRegister() {
         })
         api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`
 
-        toast.success('Merchant registered successfully!')
+        toast.success('Merchant registered! Now verify your email.')
         setStep(4)
+        setEmailOtpTimer(60)
+        setTimeout(() => emailOtpRefs.current[0]?.focus(), 100)
       }
     } catch (err) {
       setError(err.response?.data?.error?.message || err.message || 'Registration failed')
@@ -160,17 +235,66 @@ export default function MerchantRegister() {
     }
   }
 
-  // Step 4 -> 5: WhatsApp connected
-  const handleWhatsAppSuccess = () => {
-    setStep(5)
+  // Step 4: Send email verification OTP
+  const handleSendEmailOTP = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await api.post('/auth/send-email-otp', { email, name: ownerName })
+      if (res.data.success) {
+        setEmailOtpTimer(60)
+        if (res.data.otp) {
+          setDevEmailOtp(res.data.otp)
+          toast.success(`Email OTP: ${res.data.otp}`, { duration: 15000 })
+        } else {
+          toast.success('Verification code sent to your email')
+        }
+      }
+    } catch (err) {
+      setError(err.response?.data?.error?.message || 'Failed to send email OTP')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  // Step 5: Done
+  // Step 4: Verify email OTP
+  const handleVerifyEmail = async () => {
+    const code = emailOtp.join('')
+    if (code.length !== 6) {
+      setError('Please enter the complete 6-digit code')
+      return
+    }
+    setLoading(true)
+    setError('')
+    try {
+      const res = await api.post('/auth/verify-email-otp', { email, otp: code })
+      if (res.data.success) {
+        toast.success('Email verified!')
+        // Update local user state
+        const currentUser = useAuthStore.getState().user
+        if (currentUser) {
+          useAuthStore.setState({ user: { ...currentUser, emailVerified: true } })
+        }
+        setStep(5)
+      }
+    } catch (err) {
+      setError(err.response?.data?.error?.message || 'Verification failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Step 5 -> 6: WhatsApp connected
+  const handleWhatsAppSuccess = () => {
+    setStep(6)
+  }
+
+  // Step 6: Done
   const handleGoToDashboard = () => {
     navigate('/', { replace: true })
   }
 
-  const stepTitles = ['Phone Number', 'Verify OTP', 'Business Details', 'Connect WhatsApp', 'All Set!']
+  const stepTitles = ['Phone', 'Verify OTP', 'Business Details', 'Verify Email', 'WhatsApp', 'All Set!']
 
   return (
     <div className="min-h-screen flex">
@@ -242,7 +366,7 @@ export default function MerchantRegister() {
             <div className="h-1.5 bg-surface-200 rounded-full overflow-hidden">
               <div
                 className="h-full bg-primary-500 rounded-full transition-all duration-500"
-                style={{ width: `${((step - 1) / 4) * 100}%` }}
+                style={{ width: `${((step - 1) / 5) * 100}%` }}
               />
             </div>
           </div>
@@ -317,8 +441,8 @@ export default function MerchantRegister() {
                   <button onClick={() => setStep(1)} className="btn btn-secondary flex-1">
                     <ArrowLeft className="w-4 h-4" /> Back
                   </button>
-                  <button onClick={handleOtpNext} className="btn btn-primary flex-1">
-                    Continue <ArrowRight className="w-4 h-4" />
+                  <button onClick={handleOtpNext} disabled={loading} className="btn btn-primary flex-1">
+                    {loading ? <><Loader2 className="w-5 h-5 animate-spin" /> Checking...</> : <>Continue <ArrowRight className="w-4 h-4" /></>}
                   </button>
                 </div>
 
@@ -383,14 +507,50 @@ export default function MerchantRegister() {
                   </div>
 
                   <div>
-                    <label className="label">Email (optional)</label>
+                    <label className="label">Email *</label>
                     <input
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="input"
                       placeholder="business@email.com"
+                      required
                     />
+                  </div>
+
+                  <div>
+                    <label className="label">Password *</label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-surface-400" />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="input pl-10 pr-12"
+                        placeholder="Min 6 characters"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-surface-400 hover:text-surface-600"
+                      >
+                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="label">Confirm Password *</label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-surface-400" />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="input pl-10"
+                        placeholder="Re-enter password"
+                      />
+                    </div>
                   </div>
 
                   <div>
@@ -440,8 +600,73 @@ export default function MerchantRegister() {
               </div>
             )}
 
-            {/* Step 4: Connect WhatsApp */}
-            {step === 4 && merchantData && (
+            {/* Step 4: Email Verification */}
+            {step === 4 && (
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-2xl font-display font-bold text-surface-900">Verify Your Email</h2>
+                  <p className="text-surface-500 mt-1">
+                    We sent a 6-digit code to <strong className="text-surface-700">{email}</strong>
+                  </p>
+                </div>
+
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-3">
+                  <Mail className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-blue-700">
+                    Check your inbox (and spam folder) for the verification code from Tezzu.
+                  </p>
+                </div>
+
+                {devEmailOtp && (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-center">
+                    <p className="text-xs text-amber-600 font-medium uppercase tracking-wide mb-1">Dev Mode — Email OTP</p>
+                    <p className="text-3xl font-mono font-bold text-amber-800 tracking-[0.3em]">{devEmailOtp}</p>
+                  </div>
+                )}
+
+                <div className="flex justify-center gap-3">
+                  {emailOtp.map((digit, i) => (
+                    <input
+                      key={i}
+                      ref={(el) => (emailOtpRefs.current[i] = el)}
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={1}
+                      value={digit}
+                      onChange={(e) => handleEmailOtpChange(i, e.target.value)}
+                      onKeyDown={(e) => handleEmailOtpKeyDown(i, e)}
+                      className="w-12 h-14 text-center text-xl font-bold border-2 border-surface-200 rounded-xl
+                                 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none transition-all"
+                    />
+                  ))}
+                </div>
+
+                {error && <p className="text-sm text-red-600 text-center">{error}</p>}
+
+                <button onClick={handleVerifyEmail} disabled={loading} className="btn btn-primary w-full">
+                  {loading ? <><Loader2 className="w-5 h-5 animate-spin" /> Verifying...</> : <>Verify Email <CheckCircle className="w-4 h-4" /></>}
+                </button>
+
+                <div className="flex items-center justify-between">
+                  {emailOtpTimer > 0 ? (
+                    <p className="text-sm text-surface-500">Resend in {emailOtpTimer}s</p>
+                  ) : (
+                    <button onClick={handleSendEmailOTP} disabled={loading} className="text-sm text-primary-600 hover:text-primary-700 font-medium">
+                      Resend Code
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setStep(5)}
+                    className="text-sm text-surface-400 hover:text-surface-600"
+                  >
+                    Skip for now
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 5: Connect WhatsApp */}
+            {step === 5 && merchantData && (
               <div className="space-y-6">
                 <div>
                   <h2 className="text-2xl font-display font-bold text-surface-900">Connect WhatsApp</h2>
@@ -457,7 +682,7 @@ export default function MerchantRegister() {
 
                 <div className="pt-4 border-t border-surface-100">
                   <button
-                    onClick={() => setStep(5)}
+                    onClick={() => setStep(6)}
                     className="text-sm text-surface-500 hover:text-surface-700"
                   >
                     Skip for now — I'll connect WhatsApp later
@@ -466,8 +691,8 @@ export default function MerchantRegister() {
               </div>
             )}
 
-            {/* Step 5: All Done */}
-            {step === 5 && (
+            {/* Step 6: All Done */}
+            {step === 6 && (
               <div className="text-center space-y-6">
                 <div className="w-20 h-20 mx-auto bg-green-100 rounded-full flex items-center justify-center">
                   <CheckCircle className="w-10 h-10 text-green-600" />
@@ -506,7 +731,7 @@ export default function MerchantRegister() {
           </div>
 
           {/* Login link */}
-          {step < 4 && (
+          {step < 5 && (
             <p className="text-center mt-6 text-sm text-surface-500">
               Already registered?{' '}
               <Link to="/login" className="text-primary-600 hover:text-primary-700 font-medium">
