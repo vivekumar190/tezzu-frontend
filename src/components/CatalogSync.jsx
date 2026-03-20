@@ -53,7 +53,10 @@ function CatalogSetupPanel({ onSetupComplete }) {
     },
     onSuccess: (data) => {
       setCreateError(null);
-      toast.success(`Catalog "${data.data.name || catalogName}" created and configured!`);
+      const msg = data.whatsappConnected
+        ? `Catalog "${data.data.name || catalogName}" created and connected to WhatsApp!`
+        : `Catalog "${data.data.name || catalogName}" created! Connect it to WhatsApp from settings.`;
+      toast.success(msg, { duration: 5000 });
       queryClient.invalidateQueries(['catalog-status']);
       queryClient.invalidateQueries(['catalog-list']);
       onSetupComplete?.();
@@ -406,10 +409,12 @@ function MerchantSyncStatus({ merchantId, merchantName, hasMerchantCatalog }) {
     enabled: !!merchantId
   });
 
+  const { user } = useAuthStore();
+
   const syncMutation = useMutation({
     mutationFn: async () => {
-      // Use merchant-specific catalog sync if merchant has its own catalog, else global sync
-      const endpoint = hasMerchantCatalog 
+      // merchant_admin always uses their own catalog; admin uses global sync
+      const endpoint = (user?.role === 'merchant_admin' || hasMerchantCatalog)
         ? `/catalog/sync-merchant-catalog/${merchantId}`
         : `/catalog/sync/${merchantId}`;
       const res = await api.post(endpoint);
@@ -588,7 +593,8 @@ function AllMerchantsSyncPanel() {
 // Main CatalogSync Component
 export default function CatalogSync({ merchantId, merchantName, compact = false }) {
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin' || user?.role === 'merchant_admin';
+  const isSuperAdmin = user?.role === 'admin';
+  const canSetupCatalog = user?.role === 'admin' || user?.role === 'merchant_admin';
   const queryClient = useQueryClient();
 
   const { data: catalogStatus, refetch: refetchStatus } = useQuery({
@@ -605,11 +611,11 @@ export default function CatalogSync({ merchantId, merchantName, compact = false 
     return (
       <div className="mb-6">
         {/* Show setup panel for admins when not configured */}
-        {!catalogStatus?.configured && isAdmin ? (
+        {!catalogStatus?.configured && canSetupCatalog ? (
           <CatalogSetupPanel onSetupComplete={refetchStatus} />
         ) : (
           <>
-            <CatalogStatusCard status={catalogStatus} onRefresh={refetchStatus} isAdmin={isAdmin} />
+            <CatalogStatusCard status={catalogStatus} onRefresh={refetchStatus} isAdmin={canSetupCatalog} />
             
             {catalogStatus?.configured && merchantId && (
               <div className="mt-4">
@@ -638,16 +644,16 @@ export default function CatalogSync({ merchantId, merchantName, compact = false 
         </p>
       </div>
 
-      {/* Show setup panel for admins when not configured */}
-      {!catalogStatus?.configured && isAdmin ? (
+      {/* Show setup panel when not configured (for admin and merchant_admin) */}
+      {!catalogStatus?.configured && canSetupCatalog ? (
         <CatalogSetupPanel onSetupComplete={refetchStatus} />
       ) : (
         <>
-          <CatalogStatusCard status={catalogStatus} onRefresh={refetchStatus} isAdmin={isAdmin} />
+          <CatalogStatusCard status={catalogStatus} onRefresh={refetchStatus} isAdmin={canSetupCatalog} />
 
           {catalogStatus?.configured && (
             <>
-              {isAdmin ? (
+              {isSuperAdmin ? (
                 <AllMerchantsSyncPanel />
               ) : (
                 merchantId && (
@@ -674,8 +680,8 @@ export default function CatalogSync({ merchantId, merchantName, compact = false 
         </>
       )}
 
-      {!catalogStatus?.configured && !isAdmin && (
-        <CatalogStatusCard status={catalogStatus} onRefresh={refetchStatus} isAdmin={isAdmin} />
+      {!catalogStatus?.configured && !canSetupCatalog && (
+        <CatalogStatusCard status={catalogStatus} onRefresh={refetchStatus} isAdmin={false} />
       )}
     </div>
   );
